@@ -1,5 +1,6 @@
 # IGMT
-Multi-omics genetic mapping tools
+
+IGMT (Integrative Genetic Mapping Toolkit), an integrative framework for large-scale phenotypic GWAS that unifies phenotype imputation, trait clustering, association testing, and gene prioritization. IGMT leverages machine-learning models for imputation and trait complexity reduction, and integrates multi-omics and genetic evidence to improve candidate gene discovery, ultimately enabling efficient and interpretable extraction of biological insights from large-scale phenotypic data.
 
 ## Install
  This toolkit is entirely developed based on python. 
