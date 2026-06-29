@@ -2,6 +2,7 @@
 import sys
 import Common
 import random
+import time
 import numpy as np
 import pandas as pd
 import seaborn as sns
@@ -12,12 +13,10 @@ import matplotlib
 matplotlib.use('agg')
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import IterativeImputer, KNNImputer
-from sklearn.linear_model import BayesianRidge
 from sklearn.ensemble import RandomForestRegressor
-
+from sklearn.linear_model import BayesianRidge
+from sklearn.impute import SimpleImputer
+from joblib import Parallel, delayed
 
 
 
@@ -26,10 +25,11 @@ def get_args(args):
                                     formatter_class=Common.CustomFormatter
         )
     parser.add_argument("-p","--phe", required=True, help="Path of the input phenotype file")
+    parser.add_argument("-o","--out",help="Prefix of outfiles",type=str,default="out") 
     group = parser.add_mutually_exclusive_group(required=False)
     group.add_argument("-g","--globals",help="Global PCA and automatically cluster dimensionality reduction",action='store_true')
     group.add_argument("-l","--locals",help="Local PCA and automatically cluster dimensionality reduction with specified traits")
-    parser.add_argument("-i","--impute",required=False,choices=['knn', 'iterative_bayes', 'iterative_rf'],help="impute method,choose from ['knn', 'iterative_bayes', 'iterative_rf']")
+    parser.add_argument("-i","--impute",required=False,choices=['iterative_bayes', 'iterative_rf'],help="impute method,choose from ['iterative_bayes', 'iterative_rf']")
     parser.add_argument("-c","--corr_threshold",help="Threshold of the cor bewteen two traits to divide into a same group,default=0.6",default=0.6,type=float)
     parser.add_argument("-z","--pc_threshold",help="Threshold of the PC1 bewteen two traits to divide into a same group,default=0.8",default=0.8,type=float)
     parser.add_argument("-m","--miss_threshold",help="The maximum allowable proportion of missing values. Those exceeding this proportion will be discarded,default=0.2",type=float,default=None)
@@ -39,17 +39,20 @@ def get_args(args):
     parser.add_argument("--mean",help="Calculate the average value of multiple columns using the specified grouping： name | groups",default=None,type=str)
     parser.add_argument("--group_ttest",help="Conduct a t-test using the specified group: name | groups",default=None,type=str)
     parser.add_argument("--stat",help="Commonly used metrics for line-based statistics",default=None,action='store_true')
+    parser.add_argument("--cor",help="Cal and output cor bewteen two traits",default=None,action='store_true')
     parser.add_argument("--combine",help="Combine Column names",default=None)
     parser.add_argument("--combine_files",help="Files combined to -phe",default=None,nargs="*")
     parser.add_argument("--combine_method",help="Files combined method,choose from Base, Union or Intersection",default="Base")
     parser.add_argument("--subColumns",help="Extract the Columns in the file, in columns.",default=None,type=str)
     parser.add_argument("--subLines",help="Extract the Lines in the file, in lines.",default=None,type=str)
     parser.add_argument("--transpose",help="transpose line and columns and output",action='store_true')
-    parser.add_argument("--n_neighbors",help="Impute: The number of neighbors to run KNNImputer,default=5",default=5,type=int)
-    parser.add_argument("--max_iter",help="Impute: max iterative number for iterative_bayes and iterative_rf",default=5,type=int)
-    parser.add_argument("--random_state",help="Impute: random state for iterative_bayes and iterative_rf",default=0,type=int)
-    parser.add_argument("--n_estimators",help="Impute: estimators number for iterative_bayes",default=100,type=int)
-    parser.add_argument("-o","--out",help="Prefix of outfiles",type=str,default="out")   
+
+    parser.add_argument("--top_k",help="Impute Optional: Maximum number of most correlated traits selected as predictors",default=10,type=int)
+    parser.add_argument("--n_iter",help="Impute Optional: Maximum number of iterative imputation rounds ",default=5,type=int)
+    parser.add_argument("--threads",help="Impute Optional: Number of parallel threads",default=24,type=int)
+    parser.add_argument("--database", type=str,help="Impute Optional: Database matrix")
+
+ 
     parsed_args = parser.parse_args(args)
     
     return parsed_args
@@ -69,7 +72,11 @@ def main(args=None):
         run_phe(phe_data,args)
 
     elif args.impute:
-        imputer_data(phe_data,output=args.out,method=args.impute,max_iter=args.max_iter, random_state=args.random_state,n_estimators=args.n_estimators,n_neighbors=args.n_neighbors)
+        database = None
+        if args.database:
+            database = pd.read_csv(args.database, sep="\t", index_col=0)
+        impute_data(phe_data,output=args.out,database=database,method=args.impute,top_k=args.top_k,cor_threshold=args.corr_threshold,n_iter=args.n_iter,threads=args.threads)
+
 
     elif args.mean:
         run_matrix_mean(phe_data,args)
@@ -90,7 +97,8 @@ def main(args=None):
         lis=[args.phe]+args.combine_files
         run_combine(file_list=lis, on_col=args.combine, output=f"{args.out}.combine.tsv", method=args.combine_method)
 
-
+    elif args.cor:
+        cor_fig(phe_data,args.out)
 
 
 
@@ -260,6 +268,7 @@ def run_phe(phe_data,args):
 
 
     exit(0)
+
     '''
     if args.impute:
         df_mis_inpute=imputer_data(df_mis,output=args.out,method=args.impute,max_iter=args.max_iter, random_state=args.random_state,n_estimators=args.n_estimators,n_neighbors=args.n_neighbors)
@@ -565,36 +574,143 @@ def missing_values(df,miss_threshold,out):
 
 
 #----------  ---------- ---------- impute ---------- ---------- ----------
-def imputer_data(df,output="Out",method="iterative_rf",max_iter=5, random_state=0,n_estimators=100,n_neighbors=5):
-    X = df.values
+def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_threshold=0.4,n_iter=3,threads=24):
+    """
+    Impute missing values in a trait matrix.
 
-    if method == 'knn':
-        X_filled = impute_knn(X)
-    elif method == 'iterative_bayes':
-        X_filled = impute_iterative(X, estimator='BayesianRidge',max_iter=5, random_state=0,n_estimators=100)
-    elif method == 'iterative_rf':
-        X_filled = impute_iterative(X, estimator='RandomForest',max_iter=5, random_state=0)
+    Parameters
+    ----------
+    data : pandas.DataFrame
+        Target matrix (samples × traits).
+    output : str
+        Output file.
+    database : pandas.DataFrame, optional
+        Additional reference matrix. Samples should match the target matrix.
+    method : {"iterative_rf", "iterative_bayes"}
+        Imputation method.
+    top_k : int
+        Maximum number of predictor traits.
+    cor_threshold : float
+        Minimum absolute correlation for predictor selection.
+    n_iter : int
+        Number of iterative imputation rounds.
+    threads : int
+        Number of parallel threads.
+    """
 
-    df_filled = pd.DataFrame(X_filled, index=df.index, columns=df.columns)
-    df_filled.to_csv(f'{output}.impute.{method}.tsv', sep='\t', float_format='%.4f')
-    print(f"# impution done, result file: {output}.impute.{method}.tsv")
-    return df_filled
+    start_time = time.time()
+
+    df = data.copy()
+    train_df = df.copy()
+
+    if database is not None:
+        common_samples = df.index.intersection(database.index)
+        database = database.loc[common_samples]
+        train_df = pd.concat([train_df, database], axis=1)
+
+    print("# df shape:", df.shape)
+    print("# train_df shape:", train_df.shape)
+
+    print("# computing correlation matrix")
+    train_fill = train_df.fillna(train_df.mean())
+    corr_np = np.corrcoef(train_fill.values, rowvar=False)
+
+    traits = train_df.columns.tolist()
+    trait_index = {t: i for i, t in enumerate(traits)}
+
+    print("# building predictor map")
+    target_traits = df.columns[df.isna().sum() > 0]
+
+    predictor_map, mean_cor_map = build_predictor_map(traits,trait_index,corr_np,top_k,cor_threshold)
+
+    total = len(target_traits)
+    print(f"# traits with missing: {total}")
+
+    sub_train_map = {}
+    for trait in target_traits:
+        predictors = predictor_map[trait]
+        if len(predictors) == 0:
+            sub_train_map[trait] = train_df[[trait]]
+        else:
+            sub_train_map[trait] = train_df[predictors + [trait]]
+
+    results = Parallel(n_jobs=threads)(
+        delayed(impute_trait)(sub_train_map[trait],mean_cor_map[trait],trait,n_iter,i + 1,total,method)
+        for i, trait in enumerate(target_traits)
+    )
+
+    df_out = df.copy()
+    for trait, series in results:
+        df_out[trait] = series
+
+    df_out.to_csv(output, sep="\t")
+
+    elapsed = time.time() - start_time
+    print(
+        f"# total time: {int(elapsed//3600):02d}:"
+        f"{int(elapsed%3600//60):02d}:"
+        f"{int(elapsed%60):02d}"
+    )
+
+    return df_out
 
 
-def impute_knn(X, n_neighbors=5):
-    imputer = KNNImputer(n_neighbors=n_neighbors)
-    return imputer.fit_transform(X)
+def iterative_rf_single(sub_df, target_trait, n_iter=5,method="iterative_rf"):
+    df = sub_df.copy()
+    missing_mask = df[target_trait].isna()
+    if missing_mask.sum() == 0:
+        return df[target_trait]
+    predictors = df.columns.drop(target_trait)
+    df[predictors] = df[predictors].fillna(df[predictors].mean())
+    df[predictors] = df[predictors].replace([np.inf, -np.inf], np.nan).fillna(0)
+    df[target_trait] = df[target_trait].fillna(df[target_trait].mean())
+    for _ in range(n_iter):
+        train = df.loc[~missing_mask]
+        test = df.loc[missing_mask]
+        X_train, y_train = train[predictors], train[target_trait]
+        X_test = test[predictors]
+        if method == "iterative_rf":
+            model = RandomForestRegressor(n_estimators=100, n_jobs=1, random_state=0)        
+        elif method == "iterative_bayes":
+            model = BayesianRidge()
+        #model = RandomForestRegressor(n_estimators=100, n_jobs=1, random_state=0)
+        model.fit(X_train, y_train)
+        df.loc[missing_mask, target_trait] = model.predict(X_test)
+    return df[target_trait]
 
-def impute_iterative(X, estimator='BayesianRidge', max_iter=5, random_state=0):
-    if estimator == 'BayesianRidge':
-        est = BayesianRidge()
-    elif estimator == 'RandomForest':
-        est = RandomForestRegressor(n_estimators=100, random_state=random_state)
-    else:
-        raise ValueError("estimator must be 'BayesianRidge' or 'RandomForest'")
 
-    imp = IterativeImputer(estimator=est, max_iter=max_iter, random_state=random_state)
-    return imp.fit_transform(X)
+def build_predictor_map(traits, trait_index, corr_np, top_k, cor_threshold):
+    predictor_map = {}
+    mean_cor_map = {}
+    for trait in traits:
+        i = trait_index[trait]
+        cor = corr_np[i]
+        idx = np.where(np.abs(cor) > cor_threshold)[0]
+        idx = idx[idx != i]
+        if len(idx) == 0:
+            predictor_map[trait] = []
+            mean_cor_map[trait] = 0
+            continue
+        cor_vals = np.abs(cor[idx])
+        order = np.argsort(-cor_vals)
+        idx = idx[order][:top_k]
+        predictors = [traits[j] for j in idx]
+        predictor_map[trait] = predictors
+        mean_cor_map[trait] = cor_vals[order][:top_k].mean()
+    return predictor_map, mean_cor_map
+
+
+def impute_trait(sub_train_df, mean_cor, trait, n_iter, idx, total,method="iterative_rf"):
+    missing_mask = sub_train_df[trait].isna()
+    missing_n = missing_mask.sum()
+    predictors = sub_train_df.columns.drop(trait)
+    if len(predictors) == 0:
+        print(f"# {idx}/{total} trait={trait} predictors=0 missing={missing_n} mean_cor=0")
+        return trait, sub_train_df[trait]
+    imputed = iterative_rf_single(sub_train_df, trait, n_iter,method)
+    print(f"# {idx}/{total} trait={trait} predictors={len(predictors)} "
+          f"missing={missing_n} mean_cor={mean_cor:.3f}")
+    return trait, imputed
 
 #----- -----  ----- ----- ----- ----- cluster ----- ----- ----- ----- ----- -----     
 def compute_pca(data):

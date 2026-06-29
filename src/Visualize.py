@@ -205,10 +205,8 @@ def manhatan_fig_v1(df, cut, ylab, out, sub=None,local=None,hightlight=None,colo
     """
     df = df.copy()
     
-    # 检查是否有Order列，用于双向绘图
     has_direction = 'Order' in df.columns
     
-    # 如果指定了子集染色体
     y_max = df['Value'].max()
 
     if sub:
@@ -224,21 +222,19 @@ def manhatan_fig_v1(df, cut, ylab, out, sub=None,local=None,hightlight=None,colo
         out = f"{subchr}_{start}_{end}"
 
     print(df)
-    # 排序染色体
+
     df['Chrom'] = df['Chrom'].astype(str)
     chrom_order = Common.get_sorted_chromosomes(df['Chrom'].unique())
     df['Chrom'] = pd.Categorical(df['Chrom'], categories=chrom_order, ordered=True)
     df = df.sort_values(['Chrom', 'Pos'])
 
-    # 如果有方向信息，调整Value值
     if has_direction:
         df['Value'] = df.apply(lambda row: -row['Value'] if row['Order'] == '-' else row['Value'], axis=1)
 
-    # 计算位置偏移
+
     df['ind'] = range(len(df))
     df_grouped = df.groupby('Chrom')
 
-    # 绘图
     fw=int(figsize[0])
     fh=int(figsize[1])
     print(fw,fh)
@@ -254,30 +250,27 @@ def manhatan_fig_v1(df, cut, ylab, out, sub=None,local=None,hightlight=None,colo
         x_labels.append(name)
         x_labels_pos.append((group['ind'].iloc[0] + group['ind'].iloc[-1]) / 2)
 
-    # 添加cut线（双向）
+
     for c in cut:
         ax.axhline(y=c, color='gray', linestyle='--', linewidth=1)
         if has_direction:
             ax.axhline(y=-c, color='gray', linestyle='--', linewidth=1)
 
-    # 高亮 SNP 和注释
     if hightlight:
         highlight_ids = list(hightlight.keys())
         highlight_df = df[df['ID'].isin(highlight_ids)]
     
-        # 单独处理每个高亮 SNP
         for _, row in highlight_df.iterrows():
             snp_id = row['ID']
             x = row['ind']
             y = row['Value']
             label, color = hightlight.get(snp_id, [snp_id, 'red'])
             
-            # 画点（总是改变颜色）
             ax.scatter(x, y, color=color, s=10, zorder=10)
             
-            # 只有当注释文本不是"-"时才添加标注
+
             if label != "-":
-                y_text = y + (0.8 if y >= 0 else -0.8)  # 文本高度（根据方向调整）
+                y_text = y + (0.8 if y >= 0 else -0.8)  
                 ax.annotate(label,
                            xy=(x, y), xycoords='data',
                            xytext=(x, y_text), textcoords='data',
@@ -291,7 +284,10 @@ def manhatan_fig_v1(df, cut, ylab, out, sub=None,local=None,hightlight=None,colo
     ax.set_xlabel('Chromosome')
     ax.set_ylabel(ylab)
     ax.set_title(out)
-    
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
+
     # 如果有方向信息，调整y轴范围并添加零线
     if has_direction:
         y_max = max(df['Value'].max(), abs(df['Value'].min()))
@@ -438,6 +434,8 @@ def PvgMain(args):
    
     df_inf = pd.DataFrame.from_dict(Phe, orient='index', columns=['Phenotype'])
     df_inf.index.name="Sample"
+    #df_inf = pd.to_numeric(df_inf, errors="coerce").dropna()
+
     
     if args.group:
         sample_group= Common.read_file(args.group,mode="dict",keys=[0],vals=[1])
@@ -451,13 +449,14 @@ def PvgMain(args):
         sample_gt = dict(zip(header[args.gt_start-1:],GTs[snp][args.gt_start-1:]))
         df_inf = Common.updata_df(df_inf,snp,sample_gt,missing="None")
         df_draw1=df_inf[df_inf[snp] != 'NN']
+        df_draw1=df_inf[df_inf['Phenotype'] != 'NA']
         #min_count = len(df_draw1)*0.05
         plot_boxplot_ttest(df_draw1,snp, 'Phenotype',f"{snp}.Phe_by_GT.pdf",min_count=len(df_draw1)*args.group_min_rate)
         if args.group:
             df_draw2=df_draw1[df_draw1['Group'] != 'None']
             plot_stacked_bar(df_draw2,f"{snp}.GT_by_group.pdf",value=snp,min_count=len(df_draw2)*args.group_min_rate)
 
-    df_inf.to_csv(f"Sample.phe.gt.info.xls",sep="\t",index=True)
+    df_inf.to_csv(f"{args.out}.phe.gt.info.xls",sep="\t",index=True)
 
 
 def plot_stacked_bar(df,out,value="Phenotype"):
@@ -517,9 +516,9 @@ def plot_boxplot_ttest(df,x,y,out,ttest_pairs=None,figsize=(5, 5),dpi=300,xlab=N
     if colors is not None:
         # 用户自定义颜色映射，不改变
         palette = colors
-        ax = sns.boxplot(x=x, y=y, data=df, order=gt_list, palette=palette)
+        ax = sns.boxplot(x=x, y=y, data=df, width=0.4,order=gt_list, palette=palette)
     else:
-        ax = sns.boxplot(x=x, y=y, data=df, order=gt_list)
+        ax = sns.boxplot(x=x, y=y, data=df, width=0.4,order=gt_list)
 
     # === 修改 x 轴标签，添加 n 值 ===
     n_per_group = df.groupby(x)[y].count()
@@ -547,7 +546,11 @@ def plot_boxplot_ttest(df,x,y,out,ttest_pairs=None,figsize=(5, 5),dpi=300,xlab=N
                 continue
             group1 = df[df[x] == gt1][y]
             group2 = df[df[x] == gt2][y]
+            print(group1)
+            print(group2)
             stat, p = ttest_ind(group1, group2, equal_var=False)
+            print(stat,p)
+            #stat, p = ttest_ind(group1, group2)
             label = get_sig_label(p)
 
             x1, x2 = x_pos[gt1], x_pos[gt2]
@@ -561,6 +564,10 @@ def plot_boxplot_ttest(df,x,y,out,ttest_pairs=None,figsize=(5, 5),dpi=300,xlab=N
     plt.title(f"Boxplot of {y} by {x}")
     plt.xlabel(xlab)
     plt.ylabel(ylab)
+
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+
     plt.tight_layout()
     plt.savefig(out, dpi=dpi)
     plt.close()

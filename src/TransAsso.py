@@ -37,6 +37,9 @@ def main(args=None):
     Exp = pd.read_table(args.express,sep="\t",index_col=0)
 
     covar_df = read_Cov(args.cov)
+    #print(covar_df.dtypes)
+    #print(covar_df.head())
+
 
     Genes = Exp.index.tolist()
     print(f"## Total Genes: {len(Genes)}\n") 

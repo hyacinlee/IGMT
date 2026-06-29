@@ -63,13 +63,6 @@ Combine "combine_files" into the base file (-p):
 IGMT.py Phenotype --combine Sample --combine_method Base -p example.raw.phe --combine_files new.traits1.txt new.traits2.txt  --out Combine
 
 
-Run imputation only
-------------------------------------------------------------
-IGMT.py Phenotype -p example.mask5.masked.tsv -i knn --n_neighbors 10 -o example
-IGMT.py Phenotype -p example.mask5.masked.tsv -i iterative_bayes  --max_iter -o example
-IGMT.py Phenotype -p example.mask5.masked.tsv -i iterative_bayes  -o example
-
-
 Column-wise group mean calculation (typically used for handling multiple replicates):
 ------------------------------------------------------------------------------------------------------------------------
 IGMT.py Phenotype -p gene.expression.phe --mean group.txt --out  gene.expression 
@@ -88,6 +81,16 @@ group2  Hight
 group3  Low
 group4  Low
 ...
+
+```
+
+#### Impution
+```
+# Impute missing values using the input matrix itself
+IGMT.py Phenotype -p Area_matrix_final_filter.tsv --impute iterative_rf --top_k 10 --corr_threshold 0.7 -o Area_matrix_final_filter_impute1.tsv
+
+# Impute missing values using an external database matrix
+IGMT.py Phenotype -p Area_matrix_final_filter_impute1.tsv  --impute iterative_rf --top_k 10 --corr_threshold 0.7 --database ../Date_base.met3971.rename.tsv -o Area_matrix_final_filter_impute2.tsv
 
 ```
 
