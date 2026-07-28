@@ -17,6 +17,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import BayesianRidge
 from sklearn.impute import SimpleImputer
 from joblib import Parallel, delayed
+from sklearn.preprocessing import StandardScaler
 
 
 
@@ -145,7 +146,7 @@ def run_combine(file_list,on_col,output,method="Union",fillna="None", sep="\t",)
     merged = merged.fillna(fillna)
 
     if output:
-        merged.to_csv(output, sep=sep, index=False)
+        merged.to_csv(output, sep=sep, index=False,na_rep="NA")
     else:
         print(merged)
 
@@ -168,7 +169,7 @@ def row_statistics(df,output):
     })
     stats_df = stats_df.reset_index()
     stats_df.rename(columns={'index': 'Info'}, inplace=True)
-    stats_df.to_csv(f"{output}.stat_row.tsv",sep="\t",index=False)
+    stats_df.to_csv(f"{output}.stat_row.tsv",sep="\t",index=False,na_rep="NA")
 
 
 
@@ -211,7 +212,7 @@ def run_matrix_group_ttest(df,args):
         })
 
     res_df = pd.DataFrame(results).sort_values("pvalue")
-    res_df.to_csv(f"{args.out}.grouped.t-test.tsv",sep="\t",index=False)
+    res_df.to_csv(f"{args.out}.grouped.t-test.tsv",sep="\t",index=False,na_rep="NA")
     print(res_df)
     #return res_df
 
@@ -224,20 +225,20 @@ def run_matrix_mean(df,args):
     df = df[valid_samples]
     df_renamed = df.rename(columns=sample_to_group)
     df_grouped = df_renamed.groupby(level=0, axis=1).mean()
-    df_grouped.to_csv(f"{args.out}.grouped.tsv",sep="\t")
+    df_grouped.to_csv(f"{args.out}.grouped.tsv",sep="\t",na_rep="NA")
     #print(df_grouped)
 
 
 def run_matrix_sub(phe_data,args):
     print("Get Sub df with samples or traits")
     df_sub=sub_sample_traits(phe_data,args.subColumns,args.subLines)
-    df_sub.to_csv(f"{args.out}.sub_set.tsv",sep="\t")
+    df_sub.to_csv(f"{args.out}.sub_set.tsv",sep="\t",na_rep="NA")
     exit(0)
 
 def run_matrix_transpose(phe_data,args):
     df = phe_data.T
     df.index.name = args.index
-    df.to_csv(f"{args.out}.transpose.tsv",sep="\t")
+    df.to_csv(f"{args.out}.transpose.tsv",sep="\t",na_rep="NA")
     exit(0)
 
 
@@ -250,7 +251,7 @@ def run_phe(phe_data,args):
     if args.globals:
         best_result, change_history = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap)
         df_change = pd.DataFrame(change_history, columns=['times', 'length', 'n50', 'uncluster', 'top20'])
-        df_change.to_csv(f"{args.out}.best_history.tsv", sep='\t', index=False)
+        df_change.to_csv(f"{args.out}.best_history.tsv", sep='\t', index=False,na_rep="NA")
         
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig)
@@ -260,7 +261,7 @@ def run_phe(phe_data,args):
         start_list = pd.read_csv(args.locals, sep='\t').iloc[:, 0].tolist()
         best_result, change_history = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list)
         df_change = pd.DataFrame(change_history, columns=['times', 'length', 'n50', 'uncluster', 'top20'])
-        df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False)
+        df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False,na_rep="NA")
 
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig, plot_bar=False)
@@ -601,6 +602,10 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
     start_time = time.time()
 
     df = data.copy()
+
+    n_missing_before = df.isna().sum().sum()
+    n_total = df.size
+
     train_df = df.copy()
 
     if database is not None:
@@ -639,13 +644,29 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
         for i, trait in enumerate(target_traits)
     )
 
+    
     df_out = df.copy()
-    for trait, series in results:
+    dones = 0 
+    for trait, series, flag in results:
         df_out[trait] = series
+        dones += flag
 
-    df_out.to_csv(output, sep="\t")
+    #df_out = pd.concat([df_out, df_not_common], axis=0)
 
     elapsed = time.time() - start_time
+    n_missing_after = df_out.isna().sum().sum()
+    missing_rate_before = n_missing_before / n_total * 100
+    missing_rate_after = n_missing_after / n_total * 100
+
+    print(
+        f"# Succeed imputed: {dones}/{total}\n"
+        f"# Missing rate before imputed: {n_missing_after} ({missing_rate_before})\n"
+        f"# Missing rate after imputed: {n_missing_after} ({missing_rate_after})\n"
+    )
+    df_out=df_out.round(6)
+    df_out.to_csv(output, sep="\t",na_rep="NA")
+
+    
     print(
         f"# total time: {int(elapsed//3600):02d}:"
         f"{int(elapsed%3600//60):02d}:"
@@ -706,11 +727,12 @@ def impute_trait(sub_train_df, mean_cor, trait, n_iter, idx, total,method="itera
     predictors = sub_train_df.columns.drop(trait)
     if len(predictors) == 0:
         print(f"# {idx}/{total} trait={trait} predictors=0 missing={missing_n} mean_cor=0")
-        return trait, sub_train_df[trait]
+        return trait, sub_train_df[trait] , 0
     imputed = iterative_rf_single(sub_train_df, trait, n_iter,method)
     print(f"# {idx}/{total} trait={trait} predictors={len(predictors)} "
           f"missing={missing_n} mean_cor={mean_cor:.3f}")
-    return trait, imputed
+    return trait, imputed, 1
+
 
 #----- -----  ----- ----- ----- ----- cluster ----- ----- ----- ----- ----- -----     
 def compute_pca(data):
@@ -794,7 +816,7 @@ def cor_fig(df,save_path):
     plt.figure(figsize=(10,10))
     sns.clustermap(correlation_matrix,cmap="coolwarm", figsize=(10, 10))
     plt.savefig(f"{save_path}.png", dpi=300)
-    correlation_matrix.to_csv(f"{save_path}.cor_matrix.tsv",sep="\t")
+    correlation_matrix.to_csv(f"{save_path}.cor_matrix.tsv",sep="\t",na_rep="NA")
 
 
 

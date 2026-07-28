@@ -175,7 +175,16 @@ def read_matrix_data(infile,order):
             for i in range(len(Hlist)):
                 k1 = Hlist[i]
                 k2 = name
-                v = ls[i]
+                try:
+                    v = ls[i]
+                except IndexError:
+                    print(f"i = {i}")
+                    print(f"len(ls) = {len(ls)}")
+                    print(ls)
+                    print(l.rstrip())
+                    raise
+
+
                 if order == "h":  ##  H-line  as key
                     P=none_rep_twoDict(P,v,k1,k2) 
                 if order == "v":  ##  V-line  as key
