@@ -4,6 +4,7 @@ import Visualize
 import ParaRun
 import pandas as pd
 import numpy as np
+import gzip
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor,as_completed
 import argparse
@@ -62,7 +63,7 @@ def main(args=None):
 def process_manhantun(traits,significant):
     tasks=[]
     for trait in traits:
-        df = pd.read_table(f"Traits.{trait}.emmax.ps.tsv", sep="\t")
+        df = pd.read_table(f"Traits.{trait}.emmax.ps.tsv.gz", sep="\t",compression="gzip")
         df['Value'] = -np.log10(df['Value'])
         cut = -np.log10(significant)
         #tasks.append((Visualize.manhatan_fig_v1,(df,cut,"-log(P)",f"Traits.{trait}"),{}))
@@ -94,7 +95,8 @@ def process_trait_output(trait,significant,sampel_number):
 
     snps=Common.read_file("GWAS.snpID","dict",vals=[0,1],keys=[2])
 
-    with open(f"Traits.{trait}.emmax.ps", "r") as f,open(f"Traits.{trait}.emmax.ps.tsv", "w") as f1,open(f"Traits.{trait}.emmax.ps.significant.tsv", "w") as f2:
+    #with open(f"Traits.{trait}.emmax.ps", "r") as f,open(f"Traits.{trait}.emmax.ps.tsv", "w") as f1,open(f"Traits.{trait}.emmax.ps.significant.tsv", "w") as f2:
+    with open(f"Traits.{trait}.emmax.ps", "r") as f, gzip.open(f"Traits.{trait}.emmax.ps.tsv.gz", "wt") as f1,open(f"Traits.{trait}.emmax.ps.significant.tsv", "w") as f2:
         f1.write("Chrom\tPos\tID\tValue\tBeta\tSE\tR2\n")
         f2.write("Chrom\tPos\tID\tValue\tBeta\tSE\tR2\n")
 
@@ -154,7 +156,7 @@ def process_gwas(args):
         for trait in traits:
             if not Common.check_path_exists(f"Traits.{trait}.emmax.ps",mode = "w"):
                 result_list =  [f"Traits.{trait}.split/{c}.emmax.ps" for c in chr_list]
-                cmds.append(f"cat {' '.join(result_list)} > Traits.{trait}.emmax.ps")
+                cmds.append(f"cat {' '.join(result_list)} > Traits.{trait}.emmax.ps && rm -rf Traits.{trait}.split/*emmax.ps")
             else:
                 print(f"GWAS Result file: Traits.{trait}.emmax.ps exists, skip...." )
         if len(cmds) > 0 :

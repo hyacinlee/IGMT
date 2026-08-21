@@ -601,7 +601,9 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
 
     start_time = time.time()
 
-    df = data.copy()
+    original_index = data.index
+    df = data.copy().sort_index()
+    #df = data.copy()
 
     n_missing_before = df.isna().sum().sum()
     n_total = df.size
@@ -611,6 +613,7 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
     if database is not None:
         common_samples = df.index.intersection(database.index)
         database = database.loc[common_samples]
+        database = database.sort_index()
         train_df = pd.concat([train_df, database], axis=1)
 
     print("# df shape:", df.shape)
@@ -646,6 +649,8 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
 
     
     df_out = df.copy()
+    df_out.loc[original_index]
+    
     dones = 0 
     for trait, series, flag in results:
         df_out[trait] = series
@@ -660,7 +665,7 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
 
     print(
         f"# Succeed imputed: {dones}/{total}\n"
-        f"# Missing rate before imputed: {n_missing_after} ({missing_rate_before})\n"
+        f"# Missing rate before imputed: {n_missing_before} ({missing_rate_before})\n"
         f"# Missing rate after imputed: {n_missing_after} ({missing_rate_after})\n"
     )
     df_out=df_out.round(6)
