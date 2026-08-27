@@ -56,6 +56,7 @@ def main(args=None):
     phe = pd.read_csv(args.phe, sep="\t", header=None)
     phe.columns = ["sample", "sample2", "trait"]
 
+    geno,phe = filter_NA(geno,phe)
 
     gene_df = parpare_gene_scores(map_df,phe,geno,ld_r2=args.ld_r2,min_snps=args.min_snps,out_prefix=args.out_prefix,method=args.method,l1_ratio=args.l1_ratio)
 
@@ -63,13 +64,29 @@ def main(args=None):
     print(f"# gene effect result write to file: {args.out_prefix}.gene_effect.{args.method}.tsv...")
     r2.to_csv(f"{args.out_prefix}.gene_effect.{args.method}.tsv", sep="\t",index=False)
     #gene_df = cal_gene_scores(Xg,y,out_prefix=args.out_prefix,method=args.m,l1_ratio=args.l1_ratio)  
-    #r2_enet=compute_partial_r2(phe, enet_df,args.cov)
-    #r2_enet = compute_partial_r2(phe, enet_df,args.cov)
-    #print(r2_enet)
-    #r2_pca  = compute_partial_r2(phe, pca_df,args.cov)
-    #print(r2_pca)
 
 
+def filter_NA(geno, phe):
+    # 1. Remove samples with missing phenotype
+    phe = phe.dropna(subset=["trait"]).copy()
+
+    # 2. Keep samples shared by genotype and phenotype
+    common_samples = phe.loc[
+        phe["sample"].isin(geno.index), "sample"
+    ].tolist()
+
+    # 3. Filter and reorder phenotype
+    phe = (
+        phe.set_index("sample")
+           .loc[common_samples]
+           .reset_index()
+    )
+
+    # 4. Filter and reorder genotype
+    geno = geno.loc[common_samples]
+
+    return geno, phe
+    
 
 def parpare_gene_scores(map_df,phe,geno,ld_r2,min_snps,out_prefix,method,l1_ratio):
     
@@ -107,15 +124,9 @@ def parpare_gene_scores(map_df,phe,geno,ld_r2,min_snps,out_prefix,method,l1_rati
 
         Xg = Xg_df[snps_ld].values
 
-
-        # SNP weights
-        #weights = np.array([np.sqrt(snp_r2.get(s, 1.0)) for s in snps_ld])
         weights1 = np.array([np.sqrt(snp_r2.get(s)) for s in snps_ld])
         weights2 = np.array([get_snp_type_weight(sub, s) for s in snps_ld])
-        #print("#",gene,snps_ld)
-        #print("#",gene,snps)
-        #print("R2-based weights:", weights1)
-        #print("Type-based weights:", weights2)
+
         weights = weights1 * weights2
         Xg = Xg * weights
 

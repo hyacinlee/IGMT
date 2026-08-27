@@ -57,8 +57,8 @@ def main():
 
         TransAsso    :   The module for perform Association analysis between gene expression matrix and phenotype in population.
         
-    Date      : 2025-04-14
-    Version   : 0.1
+    Date      : 2026-08-25
+    Version   : 1.0.0
         ''',
         add_help=False,
         usage="%(prog)s < Function > [args]"

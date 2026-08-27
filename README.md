@@ -24,30 +24,72 @@ The major modules are:
     
 - **Visualize**: visualization of GWAS results, phenotype distributions, correlations, PCA, and genotype–phenotype relationships.
     
+---
+## Installation
 
-For the complete list of command-line options for each module, use:
+> **Requirements:** Python >= 3.10  
+> **Optional:** PLINK 1.9 and EMMAX are only required for the GWAS module.
 
-```bash
-IGMT.py <Module> -h
+### 1. Set up the Python environment
+
+**Option 1 — pip**
+
+If Python >= 3.10 is already available:
+
+```
+pip3 install -r requirements.txt
 ```
 
-## Install
+**Option 2 — Conda (recommended)**
 
-This toolkit is entirely developed based on python. Please ensure that your python >= 3.6 and pip3 in your env:
+```
+conda create -n IGMT -c conda-forge -c bioconda \
+    python=3.10 numpy scipy pandas scikit-learn statsmodels \
+    matplotlib seaborn cyvcf2 joblib
 
-Then :
+conda activate IGMT
+```
+
+For the **GWAS module**, install the following external software:
+
+- [PLINK 1.9](https://www.cog-genomics.org/plink/)
+- [EMMAX](https://csg.sph.umich.edu/kang/emmax/download/index.html)
+
+### 2. Download IGMT
 
 ```
 cd ${your_path}
-git clone https://github.com/hyacinlee/IGMT
+git clone https://github.com/hyacinlee/IGMT.git
+cd IGMT
+```
 
-cd ./IGMT
-pip3 install -r requirements.txt
+Add IGMT to your environment:
 
-export PATH="${your_path}/IGMT/:$PATH"
-export PYTHONPATH="${your_path}/IGMT/src:$PYTHONPATH"
+```
+export PATH="$(pwd):$PATH"
+export PYTHONPATH="$(pwd)/src:$PYTHONPATH"
+```
 
+> To make these settings permanent, add the two `export` commands to `~/.bashrc`.
+
+### 3. Test the installation
+
+```
 IGMT.py -h
+```
+
+For options of a specific module:
+
+```
+IGMT.py <Module> -h
+```
+
+For example:
+
+```
+IGMT.py Phenotype -h
+IGMT.py GWAS -h
+IGMT.py Evidence -h
 ```
 ---
 
@@ -65,7 +107,7 @@ IGMT.py Vcftools \
     --chr chromosome.rename.txt \
     -o output.rename.vcf
 
-# add snp id infomation if
+# Add SNP IDs if they are missing, as SNP IDs are required for GWAS analysis.
 IGMT.py Vcftools \
     -v input.rename.vcf \
     --add_ids \
@@ -99,28 +141,29 @@ The output is a processed VCF file. Before downstream analysis, users should con
 
 # 2. Phenotype
 
-The `Phenotype` module performs phenotype matrix preprocessing, missing-value imputation, correlation analysis, and trait clustering. It is designed particularly for large phenotypic datasets containing many correlated traits.
+The `Phenotype` module performs phenotype matrix (Samples x Traits, see it in example/phenotype.tsv) preprocessing, missing-value imputation, correlation analysis, and trait clustering. It is designed particularly for large phenotypic datasets containing many correlated traits.
 
 ## 2.1 Basic matrix operations
 
 ```bash
 # Extract traits
 IGMT.py Phenotype \
-    -p example.raw.phe \
-    --subLines Candidate.traits.ids \
-    -o Candidate.traits
+    -p phenotype.tsv \
+    --subLines Candidate.sample.ids \
+    -o Candidate.samples
 
 # Extract samples
 IGMT.py Phenotype \
-    -p example.raw.phe \
-    --subColumns Candidate.sample.ids \
-    -o Candidate.samples
+    -p phenotype.tsv \
+    --subColumns Candidate.traits.ids \
+    -o Candidate.traits
 
 # Calculate row-wise statistics
 IGMT.py Phenotype \
-    -p example.raw.phe \
+    -p phenotype.tsv \
     --stat \
     -o example
+
 ```
 
 The module also supports matrix merging, transposition, replicate averaging, correlation calculation, and group-based t-tests.
@@ -199,24 +242,25 @@ IGMT implements iterative correlation–principal component clustering to group 
 
 ```bash
 IGMT.py Phenotype \
-    -p example.raw.phe \
+    -p phenotype.tsv \
     -g \
     -c 0.7 \
     -z 0.8 \
     -b 500 \
-    -o meta.C70.Z80
+    -o phenotype.C70.Z80
 ```
 
 ### Local clustering
+- `local.txt`: A text file containing one trait ID per line.
 
 ```bash
 IGMT.py Phenotype \
-    -p example.raw.phe \
+    -p phenotype.tsv \
     -l local.txt \
     -c 0.7 \
     -z 0.8 \
     -b 500 \
-    -o meta.C70.Z80.local
+    -o phenotype.C70.Z80.local
 ```
 
 ### Important parameters
@@ -233,7 +277,7 @@ IGMT.py Phenotype \
 ### Parameter selection and expected effects
 
 The correlation threshold (`-c`) controls the initial similarity required among traits. Increasing this threshold generally produces smaller and more homogeneous groups, whereas decreasing it allows more moderately correlated traits to enter the same candidate group.
-
+   
 The PC1 threshold (`-z`) controls the amount of common variation that must be captured by the first principal component. A higher value imposes a stricter requirement for within-group consistency.
 
 Because the procedure begins from iteratively selected base traits, `-b` repeats the clustering process and reduces uncertainty associated with a particular starting order. The default of 500 iterations is recommended for final analyses; fewer iterations can be used during exploratory testing.
@@ -250,17 +294,25 @@ The derived principal-component phenotype can subsequently be used as a represen
 
 The `GWAS` module performs genome-wide association analysis for one or multiple phenotypes using EMMAX.
 
+- Ensure that **EMMAX** and **PLINK 1.9** are installed on the system. 
+- Use `--emmax` to specify the directory containing the `emmax-intel64` and `emmax-kin-intel64` executables
+- use `--plink` to specify the direct path to the **PLINK 1.9** executable.
+- `-c`: Specifies the covariate matrix. The file should not contain a header, and the first column must contain sample IDs.( see example/PCA.cov )
+- The sample IDs in the `-c` and `-p` input files should match those in the VCF file. Samples that are not shared across the input files will be automatically excluded. The order of samples in the input files does not affect the analysis.
+
 ### Basic analysis
 
 ```bash
 IGMT.py GWAS \
     -v snp.vcf \
     -p phenotype.phe \
-    -c PCA.cov
+    -c PCA.cov  \
+    --plink ~/software/reseq/plink1.9/plink
+    --emmax ~/software/reseq/EMMAX/
 ```
 
 For large VCF files, chromosomes can be processed separately:
-
+- `chrom.lst`: A text file containing one chromosome ID per line.
 ```bash
 IGMT.py GWAS \
     -v snp.vcf \
@@ -270,15 +322,16 @@ IGMT.py GWAS \
     --threads 24
 ```
 
+
 ### Important parameters
 
 |Parameter|Default|Description|
 |---|--:|---|
-|`-v, --vcf`|—|Input genotype VCF|
+|`-v, --vcf`|—|Input genotype VCF(.vcf or .vcf.gz)|
 |`-p, --phe`|—|Phenotype file|
 |`-c, --cov`|None|Covariates such as principal components or population structure|
 |`-m, --maf`|0.05|Minimum minor allele frequency|
-|`-s, --sign`|`B`|Significance threshold|
+|`-s, --sign`|B|Significance threshold|
 |`-t, --threads`|12|Number of parallel threads|
 |`--split`|None|Chromosome list for chromosome-wise parallel analysis|
 
@@ -297,11 +350,14 @@ The MAF threshold removes rare variants with insufficient genotype counts for re
 
 Population structure or other relevant covariates should normally be included using `-c` to reduce confounding.
 
-`--split` changes computational efficiency rather than the statistical model and is recommended for very large genotype datasets.
+`--split` changes computational efficiency  and is recommended for very large genotype datasets.
 
 ### Main outputs and interpretation
 
-For each phenotype, IGMT generates GWAS result tables and Manhattan plots. The result table contains SNP positions and association statistics.
+For each trait (`{trait}`) in the phenotype file, the `GWAS` module generates the following output files:
+- `Traits.{trait}.emmax.ps.tsv.gz`: Standard GWAS results containing `Chrom`, `Pos`, `ID`, `Value`, `Beta`, `SE`, and `R2`.
+- `Traits.{trait}.emmax.ps.significant.tsv`: Information on significant SNPs identified in the GWAS.
+- `Traits.{trait}.manhantun.png`: Manhattan plot of the GWAS results.
 
 Lower P-values indicate stronger evidence for phenotype–genotype association. SNPs exceeding the selected significance threshold are written to significant-site output files and can be passed directly to the `Evidence`, `GeneEffect`, or `Haplotype` modules.
 
@@ -317,12 +373,13 @@ The `Evidence` module prioritizes candidate genes by integrating significant GWA
 
 ```bash
 IGMT.py Evidence \
-    -i Traits.Pos2.emmax.ps.significant.tsv \
+    -i Traits.Pos2.emmax.ps.significant.tsv \ 
     -v genotype.vcf.gz \
-    -a snp.annovar \
+    -a Annoar/snp.filter \     # Annoar/snp.filter.variant_function and Annoar/snp.filter.exonic_variant_function 
     -b gene.bed \
+    -f Function.txt \
+    -e eQTL.txt \
     -p Traits.Pos2.phe \
-    -e cis_eQTL.txt \
     -w weight.txt \
     --regions 1 200 \
     --regions_score 2 1 \
@@ -331,12 +388,20 @@ IGMT.py Evidence \
 
 ### Core evidence parameters
 
+- `-i,`: Candidate SNP results. This file can be generated from the output of the `GWAS` module.
+- `-p`: Phenotype file. This file can also be obtained from the `GWAS` module output.
+- `-v`: Input VCF file. Only gzip-compressed VCF (`.vcf.gz`) is supported. The VCF must be indexed using **tabix** or **bcftools**, with a corresponding `.tbi` or `.csi` index file.
+- `-a`: Prefix SNP annotation results generated by **ANNOVAR** , files  {a}.variant_function  and   {a}.exonic_variant_function will be read.
+- `-b`: Tab-delimited BED-like file containing gene or mRNA coordinates. The file must contain at least five columns in the following order: `Chrom`, `start`, `end`, `strand`, and `gene_name`. See `example/gene.bed` for an example
+- `-f`: Gene functional annotation file with a header. A column named `Gene` is required, and additional annotation columns can be included. See `example/Function.txt` for an example.
+
+
 |Parameter|Default|Description|
 |---|--:|---|
 |`--snp_scores`|`10 5 3 3`|Weights for nonsynonymous, synonymous, intronic, and splicing SNP categories|
 |`--regions`|`1`|Distances from associated SNPs to nearby genes, in kb|
 |`--regions_score`|`1`|Weight assigned to each distance category|
-|`--eQTL_score`|3|Weight assigned to SNP–gene eQTL evidence|
+|`--eQTL_score`|3|Weight assigned to SNP–gene eQTL evidence, See `example/eQTL.txt` for an example|
 |`--base_scores`|0.8|Relative contribution of genetic evidence to the final integrated score|
 |`--min_sites`|5|Minimum number of candidate SNPs required to continue analysis|
 |`-w, --weight`|None|Optional additional evidence and corresponding weights|
@@ -355,18 +420,18 @@ Additional evidence can be supplied using a weight file:
 
 ```text
 #Name       Type       Weight    File
-Expression  express    5         expression.tsv
-SV          loci       3         structural_variants.bed
-DEG         gene       2         DEG.list
+Expression  express    5         weight_file/expression.tsv
+SV          loci       3         weight_file/structural_variants.bed
+DEG         gene       2         weight_file/Diff_gene.lst
 ```
 
 Supported evidence types include:
 
-- `express`: gene-expression evidence
+- `express`: gene-expression evidence, See `example/expression.tsv` for an example
     
-- `loci`: genomic interval evidence
+- `loci`: genomic interval evidence, See `example/structural_variants.bed` for an example
     
-- `gene`: candidate-gene list evidence
+- `gene`: candidate-gene list evidence, See `example/Diff_gene.lst` for an example
     
 
 The relative contributions of individual additional evidence types can be modified using the `Weight` column.
@@ -417,14 +482,14 @@ The `GeneEffect` module estimates the phenotypic contribution of SNPs assigned t
 
 ```bash
 IGMT.py GeneEffect \
-    -s SNP_gene.annotation.tsv \
-    -g genotype.tsv \
-    -p phenotype.phe \
+    -s Traits.Pos2.sign.BasicSite.xls \
+    -g Traits.Pos2.sign.BasicGT.lst \
+    -p Traits.Pos2.phe \
     -c PCA.cov \
     --method ElasticNet \
     --ld-r2 0.9 \
     --min-snps 1 \
-    -o Trait1
+    -o Traits.Pos2
 ```
 
 ### Important parameters
@@ -612,7 +677,7 @@ Specific traits can be selected using:
 IGMT.py TransAsso \
     -e expression.tsv \
     -p phenotype.phe \
-    -t Trait1 Trait2 \
+    -t Trait1 \
     -c PCA.matrix
 ```
 
@@ -664,18 +729,26 @@ IGMT.py Visualize \
 
 Important options include `--sign`, `--sub`, and `--local`, which control significance thresholds and genomic regions displayed.
 
-### Boxplot
+### Automatically performs genotype–phenotype difference analysis at each SNP locus
+```bash
+IGMT.py Visualize \
+    -m pvg \
+    --snps site.txt \
+    --gt ../Evidence/Evi.sign.BasicGT.lst
+```
+
+### Manually specify comparison groups for the boxplot.
 
 ```bash
 IGMT.py Visualize \
     -m stat \
-    --df Test.group.combine.tsv \
+    --df Sample.gene_site_phe.combine.tsv \
     --box \
-    --xData Group \
-    --yData Pos2 \
-    --ttest CSA1,CSS1 CSA1,CSS2 \
+    --xData chr7_49190912 \
+    --yData Phenotype \
+    --ttest TT,AA AA,AT \
     --figsize 8 8 \
-    -o Test.group.combine
+    -o chr7_49190912
 ```
 
 ### Correlation heatmap
@@ -751,3 +824,16 @@ In particular:
     
 
 For important analyses, users are encouraged to evaluate parameter sensitivity and retain the parameter settings used for each analysis to facilitate reproducibility.
+
+---
+##  License
+
+This project is licensed under the MIT License.
+See the [LICENSE](LICENSE) file for details.
+
+---
+##  Citation
+If you use IGMT in your research, please cite:
+**IGMT, an Integrative Genetic Mapping Toolkit for the Dissection of High-throughput and Large-scale Traits** (manuscript under review).
+
+If you encounter any bugs or have questions about using IGMT, please contact us at **hyacinlee@163.com**. 

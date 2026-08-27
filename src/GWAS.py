@@ -13,7 +13,7 @@ def get_args(args):
     parser = argparse.ArgumentParser(description="Processing muti-traits GWAS with Emmax form vcf file",
                                     formatter_class=Common.CustomFormatter
         )
-    parser.add_argument("-v", "--vcf",required=True, help="Path of the input vcf file")
+    parser.add_argument("-v", "--vcf",required=True, help="Path of the input vcf file (.vcf or .vcf.gz)")
     parser.add_argument("-p", "--phe",required=True, help="Path of the input phenotype file")
     parser.add_argument("-c","--cov",help="Covariance, could be PCA, structure or other files",type=str) 
     parser.add_argument("-o","--out",help="Prefix of outfiles",type=str,default="out")
@@ -169,8 +169,10 @@ def process_vcf_phe(args):
 
     # out 
     vcf_samples=[]
+    vcf_open = gzip.open if args.vcf.endswith(".gz") else open
+
     if not Path("GWAS.snpID").exists():
-        with open(args.vcf,"r") as f1, open("GWAS.snpID","w") as fo:
+        with vcf_open(args.vcf,"rt") as f1, open("GWAS.snpID","w") as fo:
             for line in f1:
                 ls = line.strip().split("\t")
                 if line.startswith("#CHR"):
@@ -183,7 +185,7 @@ def process_vcf_phe(args):
                         exit(1)
     else:
         print(f"# File GWAS.snpID exists, passing") 
-        with open(args.vcf,"r") as f1:
+        with vcf_open(args.vcf,"rt") as f1:
             for line in f1:
                 ls = line.strip().split("\t")
                 if line.startswith("#CHR"):
