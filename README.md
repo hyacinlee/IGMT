@@ -50,6 +50,17 @@ conda create -n IGMT -c conda-forge -c bioconda \
 conda activate IGMT
 ```
 
+**Option 3 — Building the Docker image** (can be used directly without any additional installation).
+```
+git clone https://github.com/hyacinlee/IGMT.git
+cd IGMT
+docker build -t igmt:v1.0.0 .
+
+docker run --rm  igmt:v1.0.0
+```
+
+
+If you choose Option 1 or Option 2.
 For the **GWAS module**, install the following external software:
 
 - [PLINK 1.9](https://www.cog-genomics.org/plink/)

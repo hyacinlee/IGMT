@@ -21,8 +21,8 @@ def get_args(args):
     parser.add_argument("-s","--sign",help="Significance cut line: B = 1/n || F = 0.05/n || a self-defined float",nargs="+",default=["B"])
     parser.add_argument("-t","--threads",help="The number of parallel threads to perform GWAS",type=int,default=12)
     parser.add_argument("--split",help="Run GWAS separately by chromosome, specify the chromosome list",type=str)  
-    parser.add_argument("--emmax",help="Path of the emmax dir,which include emmax-kin-intel64 and emmax-intel64 ",default="/home/minghui/software/reseq/EMMAX/")
-    parser.add_argument("--plink",help="Path of the plink v1.9",default="/home/minghui/software/reseq/plink1.9/plink")
+    parser.add_argument("--emmax",help="Path of the emmax dir,which include emmax-kin-intel64 and emmax-intel64 ",default="/opt/software/EMMAX/")
+    parser.add_argument("--plink",help="Path of the plink v1.9",default="/opt/software/plink1.9/plink")
      
     parsed_args = parser.parse_args(args)
     print (parsed_args)
