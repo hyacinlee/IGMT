@@ -800,61 +800,85 @@ Such associations provide transcriptomic support for candidate genes but do not 
 
 # 10. Visualize
 
-The `Visualize` module provides common visualization functions used throughout IGMT.
-
-Three major modes are available:
-
-```text
-manha    Manhattan plots
-pvg      genotype–phenotype visualization
-stat     general statistical visualization
-```
+The `Visualize` module supports Manhattan plots (`manha`), genotype-phenotype comparisons (`pvg`), and general statistical plots (`stat`). Run the following commands from the repository root after the Trait512 GWAS and Evidence examples above.
 
 ### Manhattan plot
+
+The GWAS `Value` column contains raw P-values, so `--log` converts them to -log10(P). `example/demo_visualize.highlight.tsv` is a three-column file without a header: SNP ID, label, and color. The supplied line is:
+
+```text
+chr7_49186818    W07g016057    red
+```
 
 ```bash
 IGMT.py Visualize \
     -m manha \
-    --site_value Traits.Pos2.emmax.ps.tsv \
-    --hightlight candidate.genes.highlight \
-    -o Traits.Pos2
+    --site_value Traits.Trait512.emmax.ps.tsv.gz \
+    --hightlight example/demo_visualize.highlight.tsv \
+    --log \
+    -o Trait512.visualize
 ```
 
-Important options include `--sign`, `--sub`, and `--local`, which control significance thresholds and genomic regions displayed.
+Expected output: `Trait512.visualize.manhattan.png`. The marker ID must match the GWAS ID column. `--sign`, `--sub`, and `--local` control the threshold, chromosome subset, and genomic interval.
 
-### Automatically performs genotype–phenotype difference analysis at each SNP locus
+### Genotype-phenotype comparisons
+
+`example/demo_visualize.snps.ids` is a one-column file without a header, with one SNP ID per line; the supplied file contains `chr7_49186818`. Use the matching Evidence genotype file and three-column GWAS phenotype file:
+
 ```bash
 IGMT.py Visualize \
     -m pvg \
-    --snps site.txt \
-    --gt ../Evidence/Evi.sign.BasicGT.lst
+    --snps example/demo_visualize.snps.ids \
+    --gt Traits.Trait512.sign.BasicGT.lst \
+    -p Traits.Trait512.phe \
+    -o Trait512.pvg
 ```
 
-### Manually specify comparison groups for the boxplot.
+Expected outputs:
+
+- `Trait512.pvg.chr7_49186818.Phe_by_GT.pdf`: automatic pairwise t-tests and a boxplot.
+- `Trait512.pvg.phe.gt.info.xls`: the joined Sample, Phenotype, and SNP-genotype table used by the next example.
+
+The tested SNP has AA = 100, AG = 88, and GG = 27 samples (215 total). The pvg mode writes PDF plots.
+
+### Specify comparison groups for the boxplot
+
+Reuse the joined table from the previous command. Each `--ttest` argument contains two observed genotype labels separated by a comma.
 
 ```bash
 IGMT.py Visualize \
     -m stat \
-    --df Sample.gene_site_phe.combine.tsv \
+    --df Trait512.pvg.phe.gt.info.xls \
     --box \
-    --xData chr7_49190912 \
+    --xData chr7_49186818 \
     --yData Phenotype \
-    --ttest TT,AA AA,AT \
+    --ttest AA,GG AA,AG \
     --figsize 8 8 \
-    -o chr7_49190912
+    -o Trait512.chr7_49186818
 ```
+
+Expected output: `Trait512.chr7_49186818.boxplot.png`.
 
 ### Correlation heatmap
 
+First extract a small trait matrix. `example/demo_visualize.traits.ids` contains five trait names, one per line without a header: Trait512, Trait516, Trait349, Trait408, and Trait853.
+
 ```bash
+IGMT.py Phenotype \
+    -p example/demo_input.phe \
+    --subColumns example/demo_visualize.traits.ids \
+    -o Trait512.cor.traits
+
 IGMT.py Visualize \
     -m stat \
-    --df Test.group.combine.tsv \
+    --df Trait512.cor.traits.sub_set.tsv \
     --cor \
-    --plot Row \
-    --exc Group \
-    -o Test.group.combine
+    --plot Col \
+    --figsize 8 8 \
+    -o Trait512.cor
 ```
+
+The extracted matrix contains 215 samples x 5 traits. `--plot Col` calculates correlations between trait columns. Expected outputs are `Trait512.cor.cor_Col.png` and the 5 x 5 matrix `Trait512.cor.cor_matrix.tsv`.
 
 ### Main visualization parameters
 
@@ -867,7 +891,6 @@ IGMT.py Visualize \
 |`--local`|None|Plot a specified genomic interval|
 |`--hightlight`|None|Highlight specified SNPs|
 |`--cor`|False|Correlation heatmap|
-|`--pca`|False|PCA visualization|
 |`--box`|False|Boxplot|
 |`--lm_dot`|False|Linear-regression scatter plot|
 

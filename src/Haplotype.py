@@ -74,6 +74,9 @@ def main(args=None):
     print("#Select SNP-info summary:")
     print(df_candi)
 
+    if df_candi.empty:
+        raise ValueError(f"No eligible SNPs found for gene {args.gene} in the supplied GWAS results and selected regions {args.region}; haplotypes cannot be constructed.")
+
     sample_hap,sample_trait = haplotype_phenotype_analysis(df_candi,vcf_file=args.vcf, pheno_file=args.phe)
 
     hap_info_df, sample_hap_df = summarize_haplotypes(sample_hap, sample_trait,df_candi)
