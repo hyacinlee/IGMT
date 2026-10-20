@@ -249,20 +249,15 @@ def run_phe(phe_data,args):
     df_mis_inpute = phe_data
 
     if args.globals:
-        best_result, change_history = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap)
-        df_change = pd.DataFrame(change_history, columns=['times', 'length', 'n50', 'uncluster', 'top20'])
-        df_change.to_csv(f"{args.out}.best_history.tsv", sep='\t', index=False,na_rep="NA")
-        
+        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap)
+        df_change.to_csv(f"{args.out}.best_history.tsv", sep='\t', index=False, na_rep="NA")
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig)
-
-
+    
     if args.locals:
         start_list = pd.read_csv(args.locals, sep='\t').iloc[:, 0].tolist()
-        best_result, change_history = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list)
-        df_change = pd.DataFrame(change_history, columns=['times', 'length', 'n50', 'uncluster', 'top20'])
-        df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False,na_rep="NA")
-
+        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list)
+        df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False, na_rep="NA")
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig, plot_bar=False)
 
@@ -333,65 +328,36 @@ def run_phe(phe_data,args):
 
 
 def bootstrap_group_traits(df_mis_inpute, corr_threshold, pc_threshold, bootstrap_times, start_list=None):
-    """
-    Perform bootstrap grouping and select the best result.
-    If start_list is provided, it will be shuffled each iteration.
-
-    Returns:
-        best_result: [groups, pc_values, group_dfs, group_pc_dfs]
-        history: list of [iteration, best_group_length, best_n50, best_uncluster, best_top20]
-    """
-    best_group_length = float('inf')
-    best_n50 = -1
-    best_uncluster = float('inf')
-    best_top20 = -1
-    best_result = []
-    history = []
+    best_pc1_score = -float("inf")
+    best_result, history = [], []
 
     for i in range(bootstrap_times):
         if start_list is not None:
-            # 打乱 start_list
             shuffled_start = start_list.copy()
             random.shuffle(shuffled_start)
-            groups, pc_values, group_dfs, group_pc_dfs = group_traits(
-                df_mis_inpute, corr_threshold, pc_threshold, shuffled_start
-            )
+            groups, pc_values, group_dfs, group_pc_dfs = group_traits(df_mis_inpute, corr_threshold, pc_threshold, shuffled_start)
         else:
-            groups, pc_values, group_dfs, group_pc_dfs = group_traits(
-                df_mis_inpute, corr_threshold, pc_threshold
-            )
+            groups, pc_values, group_dfs, group_pc_dfs = group_traits(df_mis_inpute, corr_threshold, pc_threshold)
 
-        group_length = len(groups)
-        n50, top_20_ratio, uncluster = n50_from_2d_array(groups)
+        groups, pc_values = list(groups), list(pc_values)
+        group_dfs, group_pc_dfs = list(group_dfs), list(group_pc_dfs)
 
-        # 判断是否比当前最佳更好
-        is_better = (
-            (group_length < best_group_length) or
-            (group_length == best_group_length and (
-                (n50 > best_n50) or
-                (n50 == best_n50 and (
-                    (uncluster < best_uncluster) or
-                    (uncluster == best_uncluster and top_20_ratio > best_top20)
-                ))
-            ))
-        )
+        pc1_sum = sum(pc1 * len(group) for group, pc1 in zip(groups, pc_values) if len(group) > 1)
+        trait_n = sum(len(group) for group in groups if len(group) > 1)
+        mean_pc1 = pc1_sum / trait_n if trait_n > 0 else 0
 
-        if is_better:
-            best_group_length = group_length
-            best_n50 = n50
-            best_uncluster = uncluster
-            best_top20 = top_20_ratio
+        if mean_pc1 > best_pc1_score:
+            best_pc1_score = mean_pc1
             best_result = [groups, pc_values, group_dfs, group_pc_dfs]
 
-        history.append([i+1, best_group_length, best_n50, best_uncluster, best_top20])
+        for j, (group, pc1) in enumerate(zip(groups, pc_values), 1):
+            history.append([i+1, f"Group{j}", len(group), pc1, mean_pc1, ",".join(group)])
 
-        print(
-            f"# Bootstrap {i+1} times，group lengths = {group_length} ; "
-            f"N50 = {n50} ; top_20_ratio = {top_20_ratio} ; uncluster = {uncluster}"
-        )
+        print(f"# Bootstrap {i+1}/{bootstrap_times}; groups={len(groups)}; weighted mean PC1={mean_pc1:.4f}")
 
-    return best_result, history
-
+    print(f"# Best weighted mean PC1 = {best_pc1_score:.4f}")
+    df_history = pd.DataFrame(history, columns=["Iteration", "GroupID", "Number", "PC1", "Mean_PC1", "Traits"])
+    return best_result, df_history
 
 
 
@@ -512,7 +478,17 @@ def group_traits(df, corr_threshold=0.8, pc_threshold=0.8, start_list=None):
         reverse=True
     )
 
-    return zip(*sorted_groups)
+    if not sorted_groups:
+        return [], [], [], []
+
+    groups, pc_values, group_dfs, group_pc_dfs = zip(*sorted_groups)
+
+    return (
+        list(groups),
+        list(pc_values),
+        list(group_dfs),
+        list(group_pc_dfs)
+    )
 
 
 
@@ -610,16 +586,24 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
 
     train_df = df.copy()
 
+
     if database is not None:
         common_samples = df.index.intersection(database.index)
         database = database.loc[common_samples]
         database = database.sort_index()
         train_df = pd.concat([train_df, database], axis=1)
 
+
+    logf=open(f"{output}.log","w")
+
     print("# df shape:", df.shape)
-    print("# train_df shape:", train_df.shape)
+    print("# train_df shape:",{train_df.shape})
+
+    logf.write(f"# df shape: {df.shape}\n")
+    logf.write(f"# train_df shape: {train_df.shape}\n")
 
     print("# computing correlation matrix")
+    logf.write("# computing correlation matrix\n")
     train_fill = train_df.fillna(train_df.mean())
     corr_np = np.corrcoef(train_fill.values, rowvar=False)
 
@@ -627,12 +611,15 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
     trait_index = {t: i for i, t in enumerate(traits)}
 
     print("# building predictor map")
+    logf.write("# building predictor map\n")
     target_traits = df.columns[df.isna().sum() > 0]
 
-    predictor_map, mean_cor_map = build_predictor_map(traits,trait_index,corr_np,top_k,cor_threshold)
+    #predictor_map, mean_cor_map = build_predictor_map(traits,trait_index,corr_np,top_k,cor_threshold)
+    predictor_map, mean_cor_map = build_predictor_map2(traits,trait_index,corr_np,top_k,cor_threshold,train_df,0.5)  # 2026-10-15 update predictor missing judge
 
     total = len(target_traits)
     print(f"# traits with missing: {total}")
+    logf.write(f"# traits with missing: {total}\n")
 
     sub_train_map = {}
     for trait in target_traits:
@@ -642,11 +629,18 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
         else:
             sub_train_map[trait] = train_df[predictors + [trait]]
 
-    results = Parallel(n_jobs=threads)(
+    tmp_results = Parallel(n_jobs=threads)(
         delayed(impute_trait)(sub_train_map[trait],mean_cor_map[trait],trait,n_iter,i + 1,total,method)
         for i, trait in enumerate(target_traits)
     )
 
+    results = [x[0] for x in tmp_results]
+    logs    = [x[1] for x in tmp_results]
+
+    #print(logs)
+    logf.write("trait\tmissing_n\tpredictors\tmean_cor\n")
+    for trait, missing_n, n_predictors, mean_cor in logs:
+        logf.write(f"{trait}\t{missing_n}\t{n_predictors}\t{mean_cor:.3f}\n")
     
     df_out = df.copy()
     df_out.loc[original_index]
@@ -668,8 +662,15 @@ def impute_data(data,output,database=None,method="iterative_rf",top_k=15,cor_thr
         f"# Missing rate before imputed: {n_missing_before} ({missing_rate_before})\n"
         f"# Missing rate after imputed: {n_missing_after} ({missing_rate_after})\n"
     )
+
+    logf.write(
+        f"# Succeed imputed: {dones}/{total}\n"
+        f"# Missing rate before imputed: {n_missing_before} ({missing_rate_before})\n"
+        f"# Missing rate after imputed: {n_missing_after} ({missing_rate_after})\n"
+    )
+
     df_out=df_out.round(6)
-    df_out.to_csv(output, sep="\t",na_rep="NA")
+    df_out.to_csv(f"{output}.tsv", sep="\t",na_rep="NA")
 
     
     print(
@@ -726,18 +727,58 @@ def build_predictor_map(traits, trait_index, corr_np, top_k, cor_threshold):
     return predictor_map, mean_cor_map
 
 
+def build_predictor_map2(traits, trait_index, corr_np, top_k,cor_threshold, train_df, min_coverage=0.5):
+    """
+    min_coverage=0： missing predictor covrage > 50%
+    """
+    if not 0 <= min_coverage <= 1:
+        raise ValueError("min_coverage must be between 0 and 1")
+    if top_k < 1:
+        raise ValueError("top_k must be >= 1")
+
+    missing = train_df.loc[:, traits].isna().to_numpy()
+    predictor_map, mean_cor_map = {}, {}
+
+    for trait in traits:
+        i = trait_index[trait]
+        cor = np.abs(corr_np[i])
+
+        idx = np.flatnonzero(np.isfinite(cor) & (cor > cor_threshold))
+        idx = idx[idx != i]
+
+        target_missing = missing[:, i]
+        if target_missing.any() and len(idx):
+            coverage = (~missing[target_missing][:, idx]).mean(axis=0)
+            keep = (coverage > 0) & (coverage >= min_coverage)
+            idx = idx[keep]
+
+        order = np.argsort(-cor[idx], kind="stable")
+        selected = idx[order[:top_k]]
+
+        predictor_map[trait] = [traits[j] for j in selected]
+        mean_cor_map[trait] = (float(cor[selected].mean()) if len(selected) else 0.0)
+
+    return predictor_map, mean_cor_map
+
+
+
 def impute_trait(sub_train_df, mean_cor, trait, n_iter, idx, total,method="iterative_rf"):
     missing_mask = sub_train_df[trait].isna()
     missing_n = missing_mask.sum()
     predictors = sub_train_df.columns.drop(trait)
     if len(predictors) == 0:
         print(f"# {idx}/{total} trait={trait} predictors=0 missing={missing_n} mean_cor=0")
-        return trait, sub_train_df[trait] , 0
+        result = (trait, sub_train_df[trait], 0)
+        log = (trait, missing_n, 0, 0)
+        return result, log
     imputed = iterative_rf_single(sub_train_df, trait, n_iter,method)
     print(f"# {idx}/{total} trait={trait} predictors={len(predictors)} "
           f"missing={missing_n} mean_cor={mean_cor:.3f}")
-    return trait, imputed, 1
 
+    result = (trait, imputed, 1)
+    log = (trait, missing_n,len(predictors), mean_cor)
+
+    return result, log
 
 #----- -----  ----- ----- ----- ----- cluster ----- ----- ----- ----- ----- -----     
 def compute_pca(data):

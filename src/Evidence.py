@@ -32,6 +32,7 @@ def get_args(args):
     parser.add_argument("--value",help="The column of Value in the inputfile",type=str,default="Value")
     parser.add_argument("--name",help="The column of SNP id in the inputfile",type=str,default="ID")
     parser.add_argument("--min_sites",help="The minimum number of Candidata SNPs in the input file",type=int,default=5)
+    parser.add_argument("--max_sites", help="The maximum number of candidate SNPs used for Evidence analysis",type=int,default=200)
     parser.add_argument("--eQTL_score",help="The weights score of eQTL SNPs",type=int,default=3)
     parser.add_argument("--regions",help="The range size between the leader-SNPs and candidate genes, in Kb",nargs="+",default=[1])
     parser.add_argument("--regions_score",help="The weights scores of far region SNPs,must be consistent with the number of the --regions",nargs="+",default=[1])
@@ -69,14 +70,16 @@ def main(args=None):
     #logger.info(args)
  
     #logger.info(f"Reading GWAS result from {args.input}")
-    print(f"Reading GWAS result from {args.input}")
-    df=pd.read_table(args.input, sep="\t")
-    if len(df) < args.min_sites:
-        print(f"# Warning : Significance locus in file {args.input} was less than {args.min_sites}, so this program is suspended here")
-        exit(0)
+    #print(f"Reading GWAS result from {args.input}")
+    #df=pd.read_table(args.input, sep="\t")
+    #if len(df) < args.min_sites:
+    #    print(f"# Warning : Significance locus in file {args.input} was less than {args.min_sites}, so this program is suspended here")
+    #    exit(0)
 
-    name_col= {args.chrom:"CHROM",args.pos:"POS",args.value:"P",args.name:"ID"}
-    snp_df = df.rename(columns=name_col)
+    #name_col= {args.chrom:"CHROM",args.pos:"POS",args.value:"P",args.name:"ID"}
+    #snp_df = df.rename(columns=name_col)
+    
+    snp_df = judge_df(args)
 
     gene_header,base_score_dict = check_header(args.regions,args.regions_score,args.eQTL,args.eQTL_score,args.snp_scores)
 
@@ -109,6 +112,70 @@ def main(args=None):
 
     if args.weight:
         out_weight_genes(out, df_base, args.weight, args.base_scores, Phe, args.bed, args.function)
+
+
+def judge_df(args):
+    """
+    Read GWAS results, check the number of significant SNPs,
+    and retain at most max_site SNPs ranked by P-value.
+
+    Returns
+    -------
+    snp_df : pandas.DataFrame
+        Filtered candidate SNP dataframe.
+    """
+    input_file = args.input
+    out        = args.out
+    min_site   = args.min_sites
+    max_site   = args.max_sites
+
+    print(f"Reading GWAS result from {input_file}")
+    df = pd.read_table(input_file, sep="\t")
+
+    # Check minimum number of candidate SNPs
+    if len(df) < min_site:
+        print(f"# Warning : Significant loci in file {input_file} were fewer than {min_site}, so this program is suspended here")
+        exit(0)
+
+    # Standardize column names
+    name_col = {
+        args.chrom: "CHROM",
+        args.pos: "POS",
+        args.value: "P",
+        args.name: "ID"
+    }
+    snp_df = df.rename(columns=name_col)
+
+    # Make sure P-value is numeric
+    snp_df["P"] = pd.to_numeric(snp_df["P"], errors="coerce")
+    snp_df = snp_df.dropna(subset=["P"])
+
+    # Sort all candidate SNPs by P-value
+    snp_df = snp_df.sort_values(
+        by="P",
+        ascending=True
+    ).reset_index(drop=True)
+
+    # Retain only the top N SNPs if necessary
+    if max_site > 0 and len(snp_df) > max_site:
+        print(
+            f"# Info : {len(snp_df)} candidate SNPs were detected. "
+            f"Only the top {max_site} SNPs ranked by P-value "
+            f"will be used for Evidence analysis."
+        )
+        snp_df = snp_df.head(max_site).copy()
+
+    # Output SNPs actually used for Evidence analysis
+    valid_file = f"{out}.sign.vaildSite.xls"
+    snp_df.to_csv(
+        valid_file,
+        sep="\t",
+        index=False
+    )
+
+    print(f"# Info : Valid SNPs were written to {valid_file}")
+    return snp_df
+
 
 
 def out_weight_genes(out, df, weight, base_scores, Phe, bed, function):

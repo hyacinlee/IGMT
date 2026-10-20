@@ -449,12 +449,14 @@ def PvgMain(args):
         sample_gt = dict(zip(header[args.gt_start-1:],GTs[snp][args.gt_start-1:]))
         df_inf = Common.updata_df(df_inf,snp,sample_gt,missing="None")
         df_draw1=df_inf[df_inf[snp] != 'NN']
-        df_draw1=df_inf[df_inf['Phenotype'] != 'NA']
+        #print(df_draw1)
+        print(df_draw1[snp].map(repr).value_counts(dropna=False))
+        df_draw1=df_draw1[df_draw1['Phenotype'] != 'NA']
         #min_count = len(df_draw1)*0.05
-        plot_boxplot_ttest(df_draw1,snp, 'Phenotype',f"{snp}.Phe_by_GT.pdf",min_count=len(df_draw1)*args.group_min_rate)
+        plot_boxplot_ttest(df_draw1,snp, 'Phenotype',f"{args.out}.{snp}.Phe_by_GT.pdf",min_count=len(df_draw1)*args.group_min_rate)
         if args.group:
             df_draw2=df_draw1[df_draw1['Group'] != 'None']
-            plot_stacked_bar(df_draw2,f"{snp}.GT_by_group.pdf",value=snp,min_count=len(df_draw2)*args.group_min_rate)
+            plot_stacked_bar(df_draw2,f"{args.out}.{snp}.GT_by_group.pdf",value=snp,min_count=len(df_draw2)*args.group_min_rate)
 
     df_inf.to_csv(f"{args.out}.phe.gt.info.xls",sep="\t",index=True)
 

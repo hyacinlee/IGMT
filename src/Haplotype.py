@@ -71,6 +71,8 @@ def main(args=None):
     print(df_all)
 
     df_candi=select_region(df_all,set(args.region))
+    print("#Select SNP-info summary:")
+    print(df_candi)
 
     sample_hap,sample_trait = haplotype_phenotype_analysis(df_candi,vcf_file=args.vcf, pheno_file=args.phe)
 
@@ -180,7 +182,7 @@ def haplotype_phenotype_analysis(df_nosyn, vcf_file, pheno_file):
         if sample in sample_trait:
             sample_hap[sample] = "|".join(alleles)
 
-    #print(sample_trait)
+    print(sample_trait)
     return sample_hap,sample_trait
 
 

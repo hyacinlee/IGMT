@@ -86,17 +86,18 @@ def main_BSA(args):
         
     if args.type == "ed":
         df_plot = Site.rename(columns={"ed2":"Value"})
+        #print(df_plot)
         cutoff=Common.judge_significant(args.sign,Site,"ed2")
 
-        Visualize.manhatan_fig_v1(df_plot,cutoff,"ED2",f"{args.out}.site")
-        output_candidate(Site,"ED2",f"{args.out}.site",args.sign,cutoff)
+        Visualize.manhatan_fig_v1(df_plot,cutoff,"ed2",f"{args.out}.site")
+        output_candidate(Site,"ed2",f"{args.out}.site",args.sign,cutoff)
 
         #winds
         if args.wind:
-            Wind=sliding_window_fit(Site,f"{args.out}.wind{args.wind}k.txt",args.step*1000,args.wind*1000,args.minSite,method=args.fit,chrom_col='Chrom', pos_col='Pos', value_col='Value')
+            Wind=sliding_window_fit(Site,f"{args.out}.wind{args.wind}k.txt",args.step*1000,args.wind*1000,args.minSite,method=args.fit,chrom_col='Chrom', pos_col='Pos', value_col='ed2')
 
             cutoff1=Common.judge_significant(args.sign,Wind,"Value")
-            draw_combined(Site,Wind.fillna(0),cutoff1,f"{args.out}.wind{args.wind}k")
+            draw_combined(Site,Wind.fillna(0),cutoff1,f"{args.out}.wind{args.wind}k",posC="ed2")
             candidate=output_candidate(Wind,"Value",f"{args.out}.wind{args.wind}k",args.sign,cutoff1,mergeOut=True)
 
 
