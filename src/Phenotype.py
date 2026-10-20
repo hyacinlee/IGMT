@@ -255,7 +255,7 @@ def run_phe(phe_data,args):
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig)
     
     if args.locals:
-        start_list = pd.read_csv(args.locals, sep='\t').iloc[:, 0].tolist()
+        start_list = pd.read_csv(args.locals, sep='\t', header=None, dtype=str).iloc[:, 0].tolist()
         best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list)
         df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False, na_rep="NA")
         groups, pc_values, group_dfs, group_pc_dfs = best_result
@@ -318,7 +318,7 @@ def run_phe(phe_data,args):
 
 
     if args.locals: #locals
-        start_list=pd.read_csv(args.locals, sep='\t').iloc[:, 0].tolist()
+        start_list=pd.read_csv(args.locals, sep='\t', header=None, dtype=str).iloc[:, 0].tolist()
         #for i in range(args.bootstrap):
         groups,pc_values,group_dfs,group_pc_dfs = group_traits(df_mis_inpute,args.corr_threshold,args.pc_threshold,start_list)
         output(df_mis_inpute,groups,pc_values,group_dfs,group_pc_dfs,args.out,args.fig)

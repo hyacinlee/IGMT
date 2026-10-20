@@ -1,0 +1,8 @@
+{
+  "seed": 42,
+  "mask_fraction_of_observed": 0.05,
+  "samples": 215,
+  "traits": 1000,
+  "masked_values": 10750,
+  "source_sha256": "21eac4bc5616804b97ee9f7f170c4b0c0de79c6550f0b95bb2f4fea634027ad1"
+}

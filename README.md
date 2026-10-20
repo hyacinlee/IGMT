@@ -110,8 +110,19 @@ The `Vcftools` module provides lightweight VCF preprocessing functions required 
 
 ### Example
 
+These preprocessing steps are optional and should be run only when needed for your own VCF files. The supplied `demo_input.vcf.gz` has already been formatted for the downstream examples; users can skip this section when using the demo dataset.
+
+For chromosome renaming, `chromosome.rename.txt` is a whitespace-delimited, two-column file without a header. The first column contains the old chromosome ID (as it appears in the input VCF), and the second column contains the new ID:
+
+```text
+chr01    1
+chr02    2
+```
+
+Replace these illustrative IDs with your own old-to-new mappings. Include every chromosome you want to retain: chromosomes absent from this file are discarded when `--rename_chr` is used. Keep the new IDs consistent with the downstream annotation and gene-position files.
+
 ```bash
-# Rename chromosomes
+# Rename chromosomes (only if needed)
 IGMT.py Vcftools \
     -v input.vcf \
     --rename_chr \
@@ -152,28 +163,54 @@ The output is a processed VCF file. Before downstream analysis, users should con
 
 # 2. Phenotype
 
-The `Phenotype` module performs phenotype matrix (Samples x Traits, see it in example/phenotype.tsv) preprocessing, missing-value imputation, correlation analysis, and trait clustering. It is designed particularly for large phenotypic datasets containing many correlated traits.
+The `Phenotype` module performs phenotype matrix (Samples x Traits, see it in example/demo_input.phe) preprocessing, missing-value imputation, correlation analysis, and trait clustering. It is designed particularly for large phenotypic datasets containing many correlated traits.
 
 ## 2.1 Basic matrix operations
 
+Run these commands from the IGMT repository root. `example/demo_input.phe` contains 215 samples (rows) and 1,000 traits (columns), with sample IDs in the first column and trait names in the header.
+
+`Candidate.sample.ids` and `Candidate.traits.ids` are one-column plain-text files without a header, with one ID per line. IDs must exactly match the phenotype sample IDs or trait names, respectively. `--subLines` extracts sample rows; `--subColumns` extracts trait columns.
+
+For example, `example/Candidate.sample.ids` contains:
+
+```text
+1
+2
+3
+4
+5
+```
+
+The supplied `example/Candidate.traits.ids` contains:
+
+```text
+Trait1
+Trait2
+Trait3
+Trait4
+Trait5
+```
+
+Expected outputs: `Candidate.samples.sub_set.tsv` (5 samples x 1,000 traits), `Candidate.traits.sub_set.tsv` (215 samples x 5 traits), and `demo_phenotype.stat_row.tsv` (215 sample-wise summary rows).
+
 ```bash
-# Extract traits
+# Extract samples (rows)
 IGMT.py Phenotype \
-    -p phenotype.tsv \
-    --subLines Candidate.sample.ids \
+    -p example/demo_input.phe \
+    --subLines example/Candidate.sample.ids \
     -o Candidate.samples
 
-# Extract samples
+# Extract traits (columns)
 IGMT.py Phenotype \
-    -p phenotype.tsv \
-    --subColumns Candidate.traits.ids \
+    -p example/demo_input.phe \
+    --subColumns example/Candidate.traits.ids \
     -o Candidate.traits
 
 # Calculate row-wise statistics
 IGMT.py Phenotype \
-    -p phenotype.tsv \
+    -p example/demo_input.phe \
     --stat \
-    -o example
+    -o demo_phenotype
 
 ```
 
@@ -194,26 +231,30 @@ For each phenotype with missing observations, other traits correlated with the t
 
 ### Example
 
+The original `example/demo_input.phe` contains no missing values. The supplied `example/demo_input.masked.phe` has 5% of the observed entries (10,750 values) replaced with `NA` using random seed 42. Sample IDs, trait names, and unmasked values are unchanged. `example/demo_input.masked.truth.tsv` records the masked sample/trait coordinates and original values; `example/demo_input.masked.metadata.json` records masking settings.
+
+Use the truth table only to evaluate predictions at artificially masked entries. Do not supply it as an imputation input or reference database. Some masked values may remain missing if no eligible predictors are available.
+
 ```bash
 IGMT.py Phenotype \
-    -p phenotype.tsv \
+    -p example/demo_input.masked.phe \
     --impute iterative_rf \
     --top_k 10 \
     --corr_threshold 0.7 \
     --n_iter 5 \
-    -o phenotype.imputed.tsv
+    -o phenotype.imputed
 ```
 
-An external phenotype or multi-dimensional reference matrix can also be supplied:
+Optional: an external phenotype or multi-dimensional reference matrix can also be supplied. This requires a user-prepared reference.matrix.tsv (tab-delimited samples x reference traits, with a header and matching sample IDs in the first column). Reference-trait names should differ from target-trait names. This file is not required for the self-contained example above:
 
 ```bash
 IGMT.py Phenotype \
-    -p phenotype.tsv \
+    -p example/demo_input.masked.phe \
     --impute iterative_rf \
     --database reference.matrix.tsv \
     --top_k 10 \
     --corr_threshold 0.7 \
-    -o phenotype.imputed.tsv
+    -o phenotype.imputed
 ```
 
 ### Important parameters
@@ -239,7 +280,7 @@ Because correlation structures differ substantially among datasets and traits, t
 
 ### Result interpretation
 
-The main output is the completed phenotype matrix. Imputed values should not automatically be considered equivalent to directly measured observations. For downstream analyses, users should examine the proportion of missing values, the number and strength of available predictor traits, and, where possible, evaluate imputation accuracy using masked observed values.
+With the output prefix above, the outputs are phenotype.imputed.tsv (215 samples x 1,000 traits) and phenotype.imputed.log. The main output is the completed phenotype matrix. Imputed values should not automatically be considered equivalent to directly measured observations. For downstream analyses, users should examine the proportion of missing values, the number and strength of available predictor traits, and, where possible, evaluate imputation accuracy using masked observed values.
 
 Traits with few or no sufficiently correlated predictors may be less reliably imputed than traits embedded in strongly correlated phenotype groups.
 
@@ -253,7 +294,7 @@ IGMT implements iterative correlation–principal component clustering to group 
 
 ```bash
 IGMT.py Phenotype \
-    -p phenotype.tsv \
+    -p example/demo_input.phe \
     -g \
     -c 0.7 \
     -z 0.8 \
@@ -262,12 +303,23 @@ IGMT.py Phenotype \
 ```
 
 ### Local clustering
-- `local.txt`: A text file containing one trait ID per line.
+`example/local.txt` specifies the traits used to initiate local clustering. It is a one-column plain-text file without a header, with one trait name per line. Names must exactly match the phenotype header. For example:
+
+```text
+Trait1
+Trait2
+Trait3
+Trait4
+Trait5
+```
+
+IGMT starts clustering from these selected traits and searches the phenotype matrix for correlated traits that satisfy the correlation and PC1 thresholds. The list specifies starting traits, rather than restricting all cluster members to the listed traits.
+
 
 ```bash
 IGMT.py Phenotype \
-    -p phenotype.tsv \
-    -l local.txt \
+    -p example/demo_input.phe \
+    -l example/local.txt \
     -c 0.7 \
     -z 0.8 \
     -b 500 \
@@ -308,28 +360,32 @@ The `GWAS` module performs genome-wide association analysis for one or multiple 
 - Ensure that **EMMAX** and **PLINK 1.9** are installed on the system. 
 - Use `--emmax` to specify the directory containing the `emmax-intel64` and `emmax-kin-intel64` executables
 - use `--plink` to specify the direct path to the **PLINK 1.9** executable.
-- `-c`: Specifies the covariate matrix. The file should not contain a header, and the first column must contain sample IDs.( see example/PCA.cov )
+- `-c`: Specifies the covariate matrix. The file should not contain a header, and the first column must contain sample IDs.( see example/demo_input.PCA.cov )
 - The sample IDs in the `-c` and `-p` input files should match those in the VCF file. Samples that are not shared across the input files will be automatically excluded. The order of samples in the input files does not affect the analysis.
 
 ### Basic analysis
 
+Run from the IGMT repository root. The supplied VCF, phenotype, and covariate files contain matching IDs for 215 samples. `example/demo_input.vcf.gz` contains 76,254 variants across 15 chromosomes; `example/demo_input.PCA.cov` contains sample IDs followed by three numeric PCA covariates, without a header. Replace the PLINK and EMMAX paths below with their installed locations on your system.
+
 ```bash
 IGMT.py GWAS \
-    -v snp.vcf \
-    -p phenotype.phe \
-    -c PCA.cov  \
-    --plink ~/software/reseq/plink1.9/plink
+    -v example/demo_input.vcf.gz \
+    -p example/demo_input.phe \
+    -c example/demo_input.PCA.cov  \
+    --plink ~/software/reseq/plink1.9/plink \
     --emmax ~/software/reseq/EMMAX/
 ```
 
 For large VCF files, chromosomes can be processed separately:
-- `chrom.lst`: A text file containing one chromosome ID per line.
+- `example/chrom.lst`: A text file without a header containing one chromosome ID per line, matching the first column of the supplied VCF.
 ```bash
 IGMT.py GWAS \
-    -v snp.vcf \
-    -p phenotype.phe \
-    -c PCA.cov \
-    --split chrom.lst \
+    -v example/demo_input.vcf.gz \
+    -p example/demo_input.phe \
+    -c example/demo_input.PCA.cov \
+    --split example/chrom.lst \
+    --plink ~/software/reseq/plink1.9/plink \
+    --emmax ~/software/reseq/EMMAX/ \
     --threads 24
 ```
 
@@ -677,7 +733,7 @@ The `TransAsso` module tests associations between population-level gene-expressi
 ```bash
 IGMT.py TransAsso \
     -e expression.tsv \
-    -p phenotype.phe \
+    -p example/demo_input.phe \
     -c PCA.matrix \
     --threads 24
 ```
@@ -687,7 +743,7 @@ Specific traits can be selected using:
 ```bash
 IGMT.py TransAsso \
     -e expression.tsv \
-    -p phenotype.phe \
+    -p example/demo_input.phe \
     -t Trait1 \
     -c PCA.matrix
 ```
