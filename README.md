@@ -4,7 +4,7 @@ IGMT provides a set of modules covering phenotype preprocessing, phenotype imput
 
 The major modules are:
 
-- **Vcftools**: VCF formatting, chromosome filtering/renaming, SNP ID generation, and genotype-field simplification.
+- **Vcftools**: basic processing of VCF files, including filtering, simplification, and renaming of chromosomes or samples.
     
 - **Phenotype**: phenotype matrix processing, missing-value imputation, trait correlation analysis, and trait clustering.
     
@@ -22,7 +22,7 @@ The major modules are:
     
 - **TransAsso**: population-level association analysis between gene expression and phenotypes.
     
-- **Visualize**: visualization of GWAS results, phenotype distributions, correlations, and genotype-phenotype relationships.
+- **Visualize**: visualization of GWAS results, phenotype distributions, correlations, PCA, and genotype–phenotype relationships.
     
 ---
 ## Installation
@@ -132,7 +132,7 @@ The complete demo inputs are included in `example/` in this checkout. GWAS and d
 | Evidence weights and result list | `demo_weight.txt`, `demo_Coloc.txt` |
 | Selection/plotting lists | `Candidate.sample.ids`, `Candidate.traits.ids`, `demo_local.txt`, `chrom.lst`, `demo_visualize.highlight.tsv`, `demo_visualize.snps.ids`, `demo_visualize.traits.ids` |
 
-All commands use paths relative to the repository root and write outputs in the current working directory. The genotype, phenotype, expression, and covariate inputs share 215 sample IDs. The phenotype matrix contains 1,000 traits; expression contains 2,083 genes.
+All commands use paths relative to the repository root and write outputs in the current working directory. The genotype, phenotype, expression, and covariate inputs use matching sample IDs.
 
 Two phenotype formats are used:
 
@@ -181,11 +181,13 @@ IGMT.py Vcftools \
 |---|---|
 |`-v, --vcf`|Input VCF file|
 |`-c, --chr`|Chromosome list or chromosome-renaming file|
+|`-k, --keep`|Sample list or sample-renaming file|
 |`-t, --tags`|FORMAT fields to retain, such as `GT AD DP`|
 |`-o, --out`|Outfile name|
 |`-a,--add_ids`|Generate SNP IDs in `chromosome_position` format|
 |`--simplify`|Remove unnecessary VCF information and retain genotype information|
 |`--rename_chr`|Rename chromosomes according to `--chr`|
+|`--rename_sample`|Rename samples according to `--keep`|
 |`--diploid`|Convert haploid genotypes to pseudo-diploid genotypes|
 
 ### Parameter selection
@@ -204,7 +206,7 @@ The `Phenotype` module performs phenotype matrix (Samples x Traits, see `example
 
 ## 2.1 Basic matrix operations
 
-Run these commands from the IGMT repository root. `example/demo_input.phe` contains 215 samples (rows) and 1,000 traits (columns), with sample IDs in the first column and trait names in the header.
+Run these commands from the IGMT repository root. In `example/demo_input.phe`, rows represent samples and columns represent traits, with sample IDs in the first column and trait names in the header.
 
 `Candidate.sample.ids` and `Candidate.traits.ids` are one-column plain-text files without a header, with one ID per line. IDs must exactly match the phenotype sample IDs or trait names, respectively. `--subLines` extracts sample rows; `--subColumns` extracts trait columns.
 
@@ -228,7 +230,7 @@ Trait4
 Trait5
 ```
 
-Expected outputs: `Candidate.samples.sub_set.tsv` (5 samples x 1,000 traits), `Candidate.traits.sub_set.tsv` (215 samples x 5 traits), and `demo_phenotype.stat_row.tsv` (215 sample-wise summary rows).
+Expected outputs are `Candidate.samples.sub_set.tsv` (selected samples), `Candidate.traits.sub_set.tsv` (selected traits), and `demo_phenotype.stat_row.tsv` (sample-wise statistics).
 
 ```bash
 # Extract samples (rows)
@@ -268,7 +270,7 @@ For each phenotype with missing observations, other traits correlated with the t
 
 ### Example
 
-The original `example/demo_input.phe` contains no missing values. The supplied `example/demo_input.masked.phe` has 5% of the observed entries (10,750 values) replaced with `NA` using random seed 42. Sample IDs, trait names, and unmasked values are unchanged. `example/demo_input.masked.truth.tsv` records the masked sample/trait coordinates and original values; `example/demo_input.masked.metadata.json` records masking settings.
+The original `example/demo_input.phe` contains no missing values. The supplied `example/demo_input.masked.phe` has 5% of the observed entries replaced with `NA` using random seed 42. Sample IDs, trait names, and unmasked values are unchanged. `example/demo_input.masked.truth.tsv` records the masked sample/trait coordinates and original values; `example/demo_input.masked.metadata.json` records masking settings.
 
 Use the truth table only to evaluate predictions at artificially masked entries. Do not supply it as an imputation input or reference database. Some masked values may remain missing if no eligible predictors are available.
 
@@ -317,7 +319,7 @@ Because correlation structures differ substantially among datasets and traits, t
 
 ### Result interpretation
 
-The self-contained example produces `phenotype.imputed.tsv` (215 samples x 1,000 traits) and `phenotype.imputed.log`. The optional reference example uses a separate `phenotype.imputed.reference` prefix to avoid overwriting them. The main output is the completed phenotype matrix. Imputed values should not automatically be considered equivalent to directly measured observations. For downstream analyses, users should examine the proportion of missing values, the number and strength of available predictor traits, and, where possible, evaluate imputation accuracy using masked observed values.
+The self-contained example produces `phenotype.imputed.tsv` and `phenotype.imputed.log`. The optional reference example uses a separate `phenotype.imputed.reference` prefix to avoid overwriting them. The main output is the completed phenotype matrix. Imputed values should not automatically be considered equivalent to directly measured observations. For downstream analyses, users should examine the proportion of missing values, the number and strength of available predictor traits, and, where possible, evaluate imputation accuracy using masked observed values.
 
 Traits with few or no sufficiently correlated predictors may be less reliably imputed than traits embedded in strongly correlated phenotype groups.
 
@@ -386,7 +388,7 @@ Because the procedure begins from iteratively selected base traits, `-b` repeats
 
 Each resulting group represents a set of phenotypes sharing substantial correlation and a common major variation component. A group containing many traits indicates a strong redundant or coordinated phenotype pattern, whereas isolated traits generally represent relatively independent phenotypic variation.
 
-The derived principal-component phenotype can subsequently be used as a representative phenotype in GWAS, reducing the number of highly redundant association tests. The 500-iteration global example took about 42 minutes in one recorded run; runtime and group memberships vary with environment and shuffled starting order. Both clustering examples retain `-b 500`.
+The derived principal-component phenotype can subsequently be used as a representative phenotype in GWAS, reducing the number of highly redundant association tests.
 
 ---
 
@@ -402,7 +404,7 @@ The `GWAS` module performs genome-wide association analysis for one or multiple 
 
 ### Basic analysis
 
-Run from the IGMT repository root. The supplied VCF, phenotype, and covariate files contain matching IDs for 215 samples. `example/demo_input.vcf.gz` contains 76,254 variants across 15 chromosomes; `example/demo_input.PCA.cov` contains sample IDs followed by three numeric PCA covariates, without a header. Replace the PLINK and EMMAX paths below with their installed locations on your system.
+Run from the IGMT repository root. The supplied VCF, phenotype, and covariate files use matching sample IDs. `example/demo_input.PCA.cov` contains sample IDs followed by numeric PCA covariates, without a header. Replace the PLINK and EMMAX paths below with their installed locations on your system.
 
 ```bash
 IGMT.py GWAS \
@@ -460,8 +462,6 @@ Population structure or other relevant covariates should normally be included us
 
 ### Main outputs and interpretation
 
-In the recorded 215-sample demo test, 70,603 variants passed the default MAF filter. Four loci have identical allele dosage across all samples and yield non-finite SE/R2 values; 70,599 loci have finite estimates. Undefined estimates should be excluded from interpretation.
-
 For each trait (`{trait}`) in the phenotype file, the `GWAS` module generates the following output files:
 - `Traits.{trait}.emmax.ps.tsv.gz`: Standard GWAS results containing `Chrom`, `Pos`, `ID`, `Value`, `Beta`, `SE`, and `R2`.
 - `Traits.{trait}.emmax.ps.significant.tsv`: Information on significant SNPs identified in the GWAS.
@@ -502,7 +502,7 @@ done
 ```
 
 
-In the tested demo, each trait has 10 significant SNPs and produces 36 candidate genes. WeightGenes is sorted by Total_score; this ranks supporting evidence and does not establish causality.
+WeightGenes is sorted by Total_score; this ranks supporting evidence and does not establish causality.
 
 ### Core evidence parameters
 
@@ -624,7 +624,7 @@ IGMT.py GeneEffect \
     -o Traits.Trait512
 ```
 
-The tested Trait512 example produces 36 gene-level rows in `Traits.Trait512.gene_effect.ElasticNet.tsv` and a 215-sample gene-score matrix.
+The command produces `Traits.Trait512.gene_effect.ElasticNet.tsv` and the corresponding sample-by-gene score matrix.
 
 ### Important parameters
 
@@ -685,7 +685,7 @@ IGMT.py Candidate \
 
 The filter keeps genes with non-missing expression evidence; `None`, `NA`, and empty values are treated as missing.
 
-The tested example produces four trait-gene records and two shared genes: `W07g015549` and `W07g015551`, each supported by Trait512 and Trait516.
+The outputs contain filtered trait-gene records and a gene-level summary across the supplied traits.
 
 ### Main parameters
 
@@ -723,14 +723,15 @@ IGMT.py Haplotype \
     -o Trait512.W07g016057
 ```
 
-The tested example uses five coding SNPs and retains 82 homozygous samples, yielding five haplotypes. Under the default Hom mode, samples with a heterozygous call at any selected SNP are excluded.
+Under the default Hom mode, samples with a heterozygous call at any selected SNP are excluded.
 
 ### Important parameters
 
 |Parameter|Default|Description|
 |---|--:|---|
 |`-g, --gene`|—|Candidate gene|
-|`-r, --region`|All|Regions used in these examples: `All`, `CDS`, `NoSyn`, or `Promoter`|
+|`-r, --region`|All|SNP classes included: `All`, `CDS`, `NoSyn`, `intronic`, or `Promoter`|
+|`-m, --method`|Hom|Haplotype processing method|
 |`-f, --flank`|2000|Promoter flanking distance in bp|
 
 ### Parameter selection
@@ -805,7 +806,7 @@ The `TransAsso` module tests associations between population-level gene-expressi
 
 ### Example
 
-The supplied expression matrix contains 2,083 genes and the same 215 samples as the demo phenotype and covariate files. Expression rows are genes, columns are sample IDs, and the first column is GeneID.
+The supplied expression matrix uses the same sample IDs as the phenotype and covariate files. Rows are genes, columns are sample IDs, and the first column is GeneID.
 
 ```bash
 IGMT.py TransAsso \
@@ -815,7 +816,7 @@ IGMT.py TransAsso \
     --threads 24
 ```
 
-The command above analyzes all 1,000 traits. For the smaller, tested two-trait example, use the following command instead:
+The command above analyzes all traits. Specific traits can be selected using:
 
 ```bash
 IGMT.py TransAsso \
@@ -825,7 +826,7 @@ IGMT.py TransAsso \
     -c example/demo_input.PCA.cov
 ```
 
-For the two-trait command above, the tested run produces 2,083 gene results per trait and 6 / 8 significant genes for Trait512 / Trait516, respectively, using the module default threshold of 1 / 2,083. Outputs are `TransAsso.Trait512.txt`, `TransAsso.Trait512.signal.txt` and corresponding Trait516 files.
+Outputs are `TransAsso.Trait512.txt`, `TransAsso.Trait512.signal.txt` and corresponding Trait516 files.
 
 ### Important parameters
 
@@ -837,6 +838,7 @@ For the two-trait command above, the tested run produces 2,083 gene results per 
 |`-t, --trait`|Traits to analyze; all traits are analyzed if omitted|
 |`-l, --loci`|Optional gene-position file|
 |`--threads`|Parallel threads|
+|`--figGenes`|Genes for which expression–phenotype plots should be generated|
 
 ### Parameter selection
 
@@ -891,7 +893,7 @@ Expected outputs:
 - `Trait512.pvg.chr7_49186818.Phe_by_GT.pdf`: automatic pairwise t-tests and a boxplot.
 - `Trait512.pvg.phe.gt.info.xls`: the joined Sample, Phenotype, and SNP-genotype table used by the next example.
 
-The tested SNP has AA = 100, AG = 88, and GG = 27 samples (215 total). The pvg mode writes PDF plots.
+The pvg mode writes PDF plots.
 
 ### Specify comparison groups for the boxplot
 
@@ -930,7 +932,7 @@ IGMT.py Visualize \
     -o Trait512.cor
 ```
 
-The extracted matrix contains 215 samples x 5 traits. `--plot Col` calculates correlations between trait columns. Expected outputs are `Trait512.cor.cor_Col.png` and the 5 x 5 matrix `Trait512.cor.cor_matrix.tsv`.
+`--plot Col` calculates correlations between trait columns. Expected outputs are `Trait512.cor.cor_Col.png` and `Trait512.cor.cor_matrix.tsv`.
 
 ### Main visualization parameters
 
@@ -943,6 +945,7 @@ The extracted matrix contains 215 samples x 5 traits. `--plot Col` calculates co
 |`--local`|None|Plot a specified genomic interval|
 |`--hightlight`|None|Highlight specified SNPs|
 |`--cor`|False|Correlation heatmap|
+|`--pca`|False|PCA visualization|
 |`--box`|False|Boxplot|
 |`--lm_dot`|False|Linear-regression scatter plot|
 
