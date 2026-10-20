@@ -53,7 +53,7 @@ def main(args=None):
 
     geno = geno_raw.set_index("ID")[sample_cols].T
 
-    phe = pd.read_csv(args.phe, sep="\t", header=None)
+    phe = pd.read_csv(args.phe, sep="\t", header=None, dtype={0: str, 1: str})
     phe.columns = ["sample", "sample2", "trait"]
 
     geno,phe = filter_NA(geno,phe)
@@ -115,8 +115,7 @@ def parpare_gene_scores(map_df,phe,geno,ld_r2,min_snps,out_prefix,method,l1_rati
 
         Xg_df = geno[snps]
 
-        #snps_ld = ld_prune(Xg_df, ld_r2)
-        snps_ld = Xg_df.columns.tolist()
+        snps_ld = ld_prune(Xg_df, ld_r2)
 
         if len(snps_ld) < min_snps:
             print(f"#LD-SNPs in {gene} is less than {min_snps}")
@@ -221,7 +220,7 @@ def compute_partial_r2(phe_df, gene_score_df, cov_file=None, standardize=True):
     # --------- 读取 covariates ---------
     covar_df = None
     if cov_file is not None:
-        covar_df = pd.read_csv(cov_file, sep="\t", header=None)
+        covar_df = pd.read_csv(cov_file, sep="\t", header=None, dtype={0: str})
         n_pc = covar_df.shape[1] - 1
         covar_df.columns = ["sample"] + [f"PC{i+1}" for i in range(n_pc)]
         covar_df = covar_df.set_index("sample")
@@ -320,7 +319,7 @@ def compute_partial_r2_permutation(
     # --------- covariates ---------
     covar_df = None
     if cov_file is not None:
-        covar_df = pd.read_csv(cov_file, sep="\t", header=None)
+        covar_df = pd.read_csv(cov_file, sep="\t", header=None, dtype={0: str})
         n_pc = covar_df.shape[1] - 1
         covar_df.columns = ["sample"] + [f"PC{i+1}" for i in range(n_pc)]
         covar_df = covar_df.set_index("sample")

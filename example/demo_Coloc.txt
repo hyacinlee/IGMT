@@ -1,0 +1,2 @@
+Trait512	Traits.Trait512.sign.WeightGenes.xls
+Trait516	Traits.Trait516.sign.WeightGenes.xls

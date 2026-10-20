@@ -137,7 +137,7 @@ def haplotype_phenotype_analysis(df_nosyn, vcf_file, pheno_file):
     # -------------------------------
     # Step 0: load phenotype
     # -------------------------------
-    pheno_df = pd.read_csv(pheno_file, sep=None, engine='python', header=None, names=["FID","IID","Trait"])
+    pheno_df = pd.read_csv(pheno_file, sep=None, engine='python', header=None, names=["FID","IID","Trait"], dtype={"FID": str, "IID": str})
     sample_trait = dict(zip(pheno_df["IID"], pheno_df["Trait"]))
 
     # -------------------------------

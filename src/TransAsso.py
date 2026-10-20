@@ -31,7 +31,8 @@ def main(args=None):
 
     out=args.out    
     ### reads Phe 
-    Phe = pd.read_table(args.phe,sep="\t",index_col=0)
+    Phe = pd.read_table(args.phe,sep="\t",index_col=0,dtype={0: str})
+    Phe.index = Phe.index.astype(str)
 
     ### reads FPKM data
     Exp = pd.read_table(args.express,sep="\t",index_col=0)
@@ -75,7 +76,7 @@ def read_Cov(cov_file):
 
     covar_df = None
     if cov_file is not None:
-        covar_df = pd.read_csv(cov_file, sep="\t", header=None)
+        covar_df = pd.read_csv(cov_file, sep="\t", header=None, dtype={0: str})
         n_pc = covar_df.shape[1] - 1
         covar_df.columns = ["sample"] + [f"PC{i+1}" for i in range(n_pc)]
         covar_df = covar_df.set_index("sample")

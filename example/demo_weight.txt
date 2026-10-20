@@ -1,0 +1,4 @@
+#Name	Type	Weight	File
+Expression	express	5	example/demo_input.expression.tsv
+SV	loci	3	example/demo_structural_variants.bed
+DEG	gene	2	example/demo_Diff_gene.lst

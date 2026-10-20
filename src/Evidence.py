@@ -481,6 +481,7 @@ def evidence_express(file,df_handle,name,Phe):
     G,Gsample,Genes  = readData(file,"v")
     candidate_genes = df_handle.index.tolist()
     for gene in candidate_genes:
+        gene_value[gene] = 0
         if gene not in G:
             print("%s has no Transcript Data, skipping" % (gene))
             gene_asso[gene] = "NA"
