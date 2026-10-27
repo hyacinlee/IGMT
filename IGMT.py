@@ -13,6 +13,8 @@ import sys
 #   sklearn
 #   subprocess
 
+__version__ = "1.1.0"
+
 SUB_COMMANDS = {
     "GWAS": "GWAS", 
     "Evidence": "Evidence",
@@ -57,12 +59,13 @@ def main():
 
         TransAsso    :   The module for perform Association analysis between gene expression matrix and phenotype in population.
         
-    Date      : 2026-08-25
-    Version   : 1.0.0
+    Date      : 2026-10-27
+    Version   : 1.1.0
         ''',
         add_help=False,
         usage="%(prog)s < Function > [args]"
     )
+    parser.add_argument("--version", action="version", version="%(prog)s " + __version__)
     parser.add_argument(
         "Function",
         choices=SUB_COMMANDS.keys(),

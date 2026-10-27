@@ -36,6 +36,8 @@ def get_args(args):
     parser.add_argument("-m","--miss_threshold",help="The maximum allowable proportion of missing values. Those exceeding this proportion will be discarded,default=0.2",type=float,default=None)
     parser.add_argument("-f","--fig",help="Also output the groups corr-heatmap",action='store_true')
     parser.add_argument("-b","--bootstrap",help="Bootstrap times to run Cluster",default=500,type=int)
+    parser.add_argument("--cluster_selection", choices=["min_groups", "max_pc1"], default="min_groups",
+                        help="Select the best clustering run: min_groups (default) or max_pc1. PC1 means are trait-number-weighted and exclude singleton groups.")
     parser.add_argument("--index",help="Add or change Index Name in output file",default="Sample",type=str)
     parser.add_argument("--mean",help="Calculate the average value of multiple columns using the specified grouping： name | groups",default=None,type=str)
     parser.add_argument("--group_ttest",help="Conduct a t-test using the specified group: name | groups",default=None,type=str)
@@ -47,7 +49,6 @@ def get_args(args):
     parser.add_argument("--subColumns",help="Extract the Columns in the file, in columns.",default=None,type=str)
     parser.add_argument("--subLines",help="Extract the Lines in the file, in lines.",default=None,type=str)
     parser.add_argument("--transpose",help="transpose line and columns and output",action='store_true')
-
     parser.add_argument("--top_k",help="Impute Optional: Maximum number of most correlated traits selected as predictors",default=10,type=int)
     parser.add_argument("--n_iter",help="Impute Optional: Maximum number of iterative imputation rounds ",default=5,type=int)
     parser.add_argument("--threads",help="Impute Optional: Number of parallel threads",default=24,type=int)
@@ -249,14 +250,14 @@ def run_phe(phe_data,args):
     df_mis_inpute = phe_data
 
     if args.globals:
-        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap)
+        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, selection=args.cluster_selection)
         df_change.to_csv(f"{args.out}.best_history.tsv", sep='\t', index=False, na_rep="NA")
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig)
     
     if args.locals:
         start_list = pd.read_csv(args.locals, sep='\t', header=None, dtype=str).iloc[:, 0].tolist()
-        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list)
+        best_result, df_change = bootstrap_group_traits(df_mis_inpute, args.corr_threshold, args.pc_threshold, args.bootstrap, start_list=start_list, selection=args.cluster_selection)
         df_change.to_csv(f"{args.out}.locals_best_history.tsv", sep='\t', index=False, na_rep="NA")
         groups, pc_values, group_dfs, group_pc_dfs = best_result
         output_cluster(df_mis_inpute, groups, pc_values, group_dfs, group_pc_dfs, args.out, args.fig, plot_bar=False)
@@ -327,8 +328,15 @@ def run_phe(phe_data,args):
 
 
 
-def bootstrap_group_traits(df_mis_inpute, corr_threshold, pc_threshold, bootstrap_times, start_list=None):
-    best_pc1_score = -float("inf")
+def bootstrap_group_traits(df_mis_inpute, corr_threshold, pc_threshold, bootstrap_times, start_list=None, selection="min_groups"):
+    """Select a repeated clustering solution; retain the earliest run on ties."""
+    if selection not in {"min_groups", "max_pc1"}:
+        raise ValueError("selection must be min_groups or max_pc1")
+    if bootstrap_times < 1:
+        raise ValueError("bootstrap_times must be at least 1")
+
+    best_key = None
+    best_iteration = None
     best_result, history = [], []
 
     for i in range(bootstrap_times):
@@ -346,8 +354,15 @@ def bootstrap_group_traits(df_mis_inpute, corr_threshold, pc_threshold, bootstra
         trait_n = sum(len(group) for group in groups if len(group) > 1)
         mean_pc1 = pc1_sum / trait_n if trait_n > 0 else 0
 
-        if mean_pc1 > best_pc1_score:
-            best_pc1_score = mean_pc1
+        if selection == "min_groups":
+            key = len(groups)
+        else:
+            key = -mean_pc1 if trait_n > 0 else float("inf")
+
+        if best_key is None or key < best_key:
+            best_key = key
+            best_iteration = i + 1
+            best_mean_pc1 = mean_pc1
             best_result = [groups, pc_values, group_dfs, group_pc_dfs]
 
         for j, (group, pc1) in enumerate(zip(groups, pc_values), 1):
@@ -355,10 +370,9 @@ def bootstrap_group_traits(df_mis_inpute, corr_threshold, pc_threshold, bootstra
 
         print(f"# Bootstrap {i+1}/{bootstrap_times}; groups={len(groups)}; weighted mean PC1={mean_pc1:.4f}")
 
-    print(f"# Best weighted mean PC1 = {best_pc1_score:.4f}")
+    print(f"# Best clustering: selection={selection}; iteration={best_iteration}; groups={len(best_result[0])}; weighted mean PC1={best_mean_pc1:.4f}")
     df_history = pd.DataFrame(history, columns=["Iteration", "GroupID", "Number", "PC1", "Mean_PC1", "Traits"])
     return best_result, df_history
-
 
 
 

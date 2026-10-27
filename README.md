@@ -1,5 +1,7 @@
 ## Introduction
 
+Current release: **v1.1.0**. See [release notes](https://github.com/hyacinlee/IGMT/releases/tag/v1.1.0) for the revision summary.
+
 IGMT provides a set of modules covering phenotype preprocessing, phenotype imputation and clustering, genome-wide association analysis, candidate gene prioritization, gene-level effect estimation, haplotype analysis, BSA, transcriptome–phenotype association, VCF processing, and visualization.
 
 The major modules are:
@@ -61,9 +63,9 @@ conda activate IGMT
 
 **Option 3 — Building the Docker image** (can be used directly without any additional installation).
 ```
-docker build -t igmt:v1.0.0 .
+docker build -t igmt:v1.1.0 .
 
-docker run --rm igmt:v1.0.0
+docker run --rm igmt:v1.1.0
 ```
 
 The commands below use a native `IGMT.py` executable. With Docker, pass the module and arguments after the image name, and mount the working directory to retain output files. For example, from the repository root:
@@ -71,7 +73,7 @@ The commands below use a native `IGMT.py` executable. With Docker, pass the modu
 ```bash
 docker run --rm \
     -v "$PWD:/work" -w /work \
-    igmt:v1.0.0 Phenotype \
+    igmt:v1.1.0 Phenotype \
     -p example/demo_input.phe --stat -o demo_phenotype
 ```
 
@@ -374,6 +376,7 @@ IGMT.py Phenotype \
 |`-c, --corr_threshold`|0.6|Minimum pairwise correlation used when constructing a candidate group|
 |`-z, --pc_threshold`|0.8|Minimum PC1 contribution required for retaining traits in a cluster|
 |`-b, --bootstrap`|500|Number of repeated clustering iterations|
+|`--cluster_selection`|`min_groups`|Select the run with the fewest groups (`min_groups`) or the highest weighted mean PC1 (`max_pc1`)|
 |`-f, --fig`|False|Output correlation heatmaps for resulting groups|
 
 ### Parameter selection and expected effects
@@ -383,6 +386,18 @@ The correlation threshold (`-c`) controls the initial similarity required among 
 The PC1 threshold (`-z`) controls the amount of common variation that must be captured by the first principal component. A higher value imposes a stricter requirement for within-group consistency.
 
 Because the procedure begins from iteratively selected base traits, `-b` repeats the clustering process and reduces uncertainty associated with a particular starting order. The default of 500 iterations is recommended for final analyses; fewer iterations can be used during exploratory testing.
+
+By default, `--cluster_selection min_groups` selects the run with the fewest total groups, including singleton groups, to maximize dimensionality reduction subject to the specified clustering thresholds. Alternatively, `--cluster_selection max_pc1` selects the highest trait-number-weighted mean PC1 variance explained across multi-trait groups, retaining the previous selection rule.
+
+For the PC1 criterion, singleton groups are excluded and the mean is calculated as `sum(group_size * PC1) / sum(group_size)` over groups containing at least two traits. Runs without multi-trait groups rank after runs with a defined mean; if all runs lack multi-trait groups, the earliest run is retained. Exact ties under any criterion retain the earliest run. The selected criterion and iteration are printed in the log, and per-group iteration records remain available in `*.best_history.tsv` (or `*.locals_best_history.tsv`). The same selection option applies to global and local clustering.
+
+```bash
+# Fewest groups (default)
+IGMT.py Phenotype -p example/demo_input.phe -g -c 0.7 -z 0.8 -b 500 --cluster_selection min_groups -o phenotype.min_groups
+
+# Previous selection rule: highest weighted mean PC1
+IGMT.py Phenotype -p example/demo_input.phe -g -c 0.7 -z 0.8 -b 500 --cluster_selection max_pc1 -o phenotype.max_pc1
+```
 
 ### Result interpretation
 
@@ -516,8 +531,8 @@ WeightGenes is sorted by Total_score; this ranks supporting evidence and does no
 
 |Parameter|Default|Description|
 |---|--:|---|
-|`--snp_scores`|`10 5 3 3`|Weights for nonsynonymous, synonymous, intronic, and splicing SNP categories|
-|`--regions`|`1`|Distances from associated SNPs to nearby genes, in kb|
+|`--snp_scores`|`10 5 3 2`|Weights for nonsynonymous, synonymous, intronic, and splicing SNP categories|
+|`--regions`|`100`|Distances from associated SNPs to nearby genes, in kb|
 |`--regions_score`|`1`|Weight assigned to each distance category|
 |`--eQTL_score`|3|Weight assigned to SNP–gene eQTL evidence, See `example/demo_eQTL.txt` for an example|
 |`--base_scores`|0.8|Relative contribution of genetic evidence to the final integrated score|

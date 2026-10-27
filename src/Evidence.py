@@ -34,9 +34,9 @@ def get_args(args):
     parser.add_argument("--min_sites",help="The minimum number of Candidata SNPs in the input file",type=int,default=5)
     parser.add_argument("--max_sites", help="The maximum number of candidate SNPs used for Evidence analysis",type=int,default=200)
     parser.add_argument("--eQTL_score",help="The weights score of eQTL SNPs",type=int,default=3)
-    parser.add_argument("--regions",help="The range size between the leader-SNPs and candidate genes, in Kb",nargs="+",default=[1])
+    parser.add_argument("--regions",help="The range size between the leader-SNPs and candidate genes, in Kb",nargs="+",default=[100])
     parser.add_argument("--regions_score",help="The weights scores of far region SNPs,must be consistent with the number of the --regions",nargs="+",default=[1])
-    parser.add_argument("--snp_scores",help="The weights of the following various type SNPs: [NoSys, Sys, intronic , splicing]",nargs="+",default=[10,5,3,3])
+    parser.add_argument("--snp_scores",help="The weights of the following various type SNPs: [NoSys, Sys, intronic , splicing]",nargs="+",default=[10,5,3,2])
     parser.add_argument("--base_scores",help="The weights of the Basic GWAS result (range from 0~1)",type=float,default=0.8)
     
 
