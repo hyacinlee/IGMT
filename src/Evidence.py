@@ -309,7 +309,7 @@ def leader_snp(dfile):
             return 2
         elif t == "splicing":
             return 3
-        elif t == "eQTL":
+        elif t == "eqtl":
             return 4
         else:
             match = re.search(r"(\d+)kb", t)
@@ -336,7 +336,7 @@ def leader_snp(dfile):
             "Nearest_ID": nearest_row["ID"],
             "Nearest_Type": nearest_row["Type"],
             "Nearest_P": nearest_row["P-GWAS"],
-            "Nearest_Dis": highest_row["Distance"]
+            "Nearest_Dis": nearest_row["Distance"]
         })
     
     # 转为DataFrame查看或保存
